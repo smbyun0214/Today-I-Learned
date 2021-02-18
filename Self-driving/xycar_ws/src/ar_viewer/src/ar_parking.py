@@ -37,16 +37,15 @@ def callback(msg):
 
 # Stanley Contorl 적용
 def stanley_control(dx, dy, yaw, v):
-    k = 70.0
+    k = 0.17
 
     # AR Tag와 차량의 사이각을 yaw_term으로 사용
     theta = np.arctan2(dx, dy)
     yaw_term = theta + yaw
 
-    # 차량과 AR Tag가 바라보는 축 사이의 거리 대신,
-    # yaw값을 통해 단위 벡터의 정사영 크기를 cte로 사용
-    # k값을 조절하여, yaw_term과 cte_term 사이의 균형을 맞춤
-    cte = np.sin(yaw)
+    # 차량과 AR Tag가 바라보는 축 사이의 거리를 cte로 사용
+    dist = np.sqrt(dx**2 + dy**2)
+    cte = dist * np.sin(yaw)
     cte_term = np.arctan2(k*cte, v)
 
     # cte_term은 AR Tag가 바라보는 축에 대한 차량에 따라 부호가 달라지는데,
