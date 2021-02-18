@@ -85,11 +85,13 @@ def show_ar_tag_position(dx, dy, yaw):
     cv2.imshow("AR Tag Position", img)
 
 
+# 노드, 발행자, 구독자 생성
 rospy.init_node("ar_drive")
 rospy.Subscriber("ar_pose_marker", AlvarMarkers, callback)  # 토픽의 구독 준비
 motor_pub = rospy.Publisher("xycar_motor_msg", Int32MultiArray, queue_size=1)   # xycar_motor_msg 토픽의 발행 준비
 
 while not rospy.is_shutdown():
+    # /ar_pose_marker 토픽을 받아서, arData가 수신이 되었을 때 진행
     if not arData["isUpdate"]:
         continue
 
@@ -99,7 +101,7 @@ while not rospy.is_shutdown():
 
     dx, dy = arData["DX"], arData["DY"]
 
-    # AR Tag까지 거리가 70이하일 경우 정지
+    # AR Tag까지 거리가 72이하일 경우, 주차장에 도착했다고 간주하고 정지
     dist = np.sqrt(dx**2 + dy**2)
     if dist <= 72:
         speed = 0
