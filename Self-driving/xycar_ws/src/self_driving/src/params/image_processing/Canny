@@ -1,0 +1,10 @@
+{
+    "default": {
+        "threshold1": [-100, 48, 1000],
+        "threshold2": [-100, 84, 1000]
+    },
+    "kernel": {
+        "Gaussian_ksize": [1, 5, 15],
+        "apertureSize": [3, 3, 7]
+    }
+}

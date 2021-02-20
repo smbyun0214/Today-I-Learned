@@ -1,0 +1,9 @@
+{
+    "default": {
+        "threshold_area": [
+            1, 
+            30, 
+            4000
+        ]
+    }
+}

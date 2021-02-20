@@ -1,0 +1,34 @@
+{
+    "default": {
+        "upper HSV H": [
+            0, 
+            255, 
+            255
+        ], 
+        "lower HSV V": [
+            0, 
+            149, 
+            255
+        ], 
+        "lower HSV S": [
+            0, 
+            0, 
+            255
+        ], 
+        "upper HSV S": [
+            0, 
+            255, 
+            255
+        ], 
+        "upper HSV V": [
+            0, 
+            255, 
+            255
+        ], 
+        "lower HSV H": [
+            0, 
+            0, 
+            255
+        ]
+    }
+}
