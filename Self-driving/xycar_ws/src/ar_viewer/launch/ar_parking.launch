@@ -1,4 +1,10 @@
 <launch>
-  <node name="xycar_sim_parking"  pkg="xycar_sim_parking" type="main.py" />
-  <node name="ar_parking"  pkg="ar_viewer" type="ar_parking.py"   output="screen" />
+  <!-- camera -->
+  <include file="$(find ar_viewer_sm)/launch/camera.launch" />
+  <!-- ar track alvar -->
+  <include file="$(find ar_viewer_sm)/launch/ar_track_alvar.launch" />
+  <!-- parking -->
+  <node name="ar_parking"  pkg="ar_viewer_sm" type="ar_parking.py"   output="screen" />
+  <!-- motor -->
+  <include file="$(find ar_viewer_sm)/launch/xycar/xycar_motor_b2.launch" />
 </launch>

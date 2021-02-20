@@ -1,0 +1,4 @@
+<launch>
+  <!-- lidar -->
+  <include file="$(find xycar_lidar)/launch/xycar_lidar.launch" output="screen" />
+</launch>
