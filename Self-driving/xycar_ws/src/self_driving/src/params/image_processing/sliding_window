@@ -2,12 +2,17 @@
     "default": {
         "scan_height": [
             0, 
-            20, 
+            23, 
             100
         ], 
         "scan_theta": [
             0, 
-            22, 
+            20, 
+            100
+        ], 
+        "histogram_threshold": [
+            0, 
+            70, 
             100
         ], 
         "win_width": [
@@ -17,13 +22,18 @@
         ], 
         "scan_width": [
             0, 
-            20, 
+            18, 
             100
         ], 
         "step_size": [
             1, 
             20, 
             1000
+        ], 
+        "count_threshold": [
+            0, 
+            70, 
+            100
         ], 
         "num_of_windows": [
             1, 
