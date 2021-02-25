@@ -59,7 +59,7 @@ class Q_Agent():
         Q_val = self.Q_table[state][action]
 
         if done:
-            self.Q_table[state][action] = reward
+            self.Q_table[state][action] = (1 - learning_rate)*Q_val + learning_rate*reward
         else:
             self.Q_table[state][action] = (1 - learning_rate)*Q_val + learning_rate*target
 
