@@ -20,12 +20,12 @@ class Car(object):
         self.steering_deg = 0   # 좌/우 앞바퀴의 중점 기준
 
         # 현재 속도/가속도 정보
-        self.velocity = 0
-        self.acceleration = 0
+        self.velocity = 0.0
+        self.acceleration = 0.0
 
         # 제한 속도/가속도/steering 정보
-        self.max_velocity = 100
-        self.max_acceleration = 50
+        self.max_velocity = 100.0
+        self.max_acceleration = 50.0
         self.max_steering_deg = 15.0
 
         # 기어 정보
