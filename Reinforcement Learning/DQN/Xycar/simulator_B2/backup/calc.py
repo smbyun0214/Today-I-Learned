@@ -88,8 +88,8 @@ def rotation_matrix(x, y, ax, ay, angle, return_type):
 def steering_to_wheel_ang_calc(vector, steering_angle, tread, wheel_base, yaw):
     global LIBC
     vector = ctypes.c_char(vector)
-    #vector = ctypes.c_char(ord(vector)) #python3
-    steering_angle = ctypes.c_double(steering_angle)
+    vector = ctypes.c_char(ord(vector)) #python3
+    # steering_angle = ctypes.c_double(steering_angle)
     tread = ctypes.c_double(tread)
     wheel_base = ctypes.c_double(wheel_base)
     yaw = ctypes.c_double(yaw)

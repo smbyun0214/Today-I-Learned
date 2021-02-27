@@ -116,25 +116,32 @@ class render:
 
     def draw_car(self, x, y, yaw):
         w, h = 162, 93
-        
-        car_img_x, car_img_y = [0.0, 0.0, 0.0, 0.0], [0.0, 0.0, 0.0, 0.0]
 
         half_w = float(w) / 2.0
         half_h = float(h) / 2.0
 
         theta = np.radians(-yaw)
-        car_x_ori = [-half_w, -half_w, half_w, half_w]
-        car_y_ori = [-half_h, half_h, -half_h, half_h]
-        
-        for cnt in range(4):
-            car_img_x[cnt], car_img_y[cnt] = rotation_matrix(car_x_ori[cnt], car_y_ori[cnt], float(x), float(y), theta, float)
-
-        X = int(round(min(car_img_x)))
-        Y = int(round(min(car_img_y)))
-
         xycar_img, _ = self.PIL2PygameIMG(self.colorImage, yaw, int(round(half_w)), int(round(half_h)))
 
-        self.screen.blit(xycar_img, [X, Y])
+        self.screen.blit(xycar_img, [x, y])
+        
+        # car_img_x, car_img_y = [0.0, 0.0, 0.0, 0.0], [0.0, 0.0, 0.0, 0.0]
+
+        # half_w = float(w) / 2.0
+        # half_h = float(h) / 2.0
+
+        # theta = np.radians(-yaw)
+        # car_x_ori = [-half_w, -half_w, half_w, half_w]
+        # car_y_ori = [-half_h, half_h, -half_h, half_h]
+        
+        # for cnt in range(4):
+        #     car_img_x[cnt], car_img_y[cnt] = rotation_matrix(car_x_ori[cnt], car_y_ori[cnt], float(x), float(y), theta, float)
+
+        # X = int(round(min(car_img_x)))
+        # Y = int(round(min(car_img_y)))
+
+        # xycar_img, _ = self.PIL2PygameIMG(self.colorImage, yaw, int(round(half_w)), int(round(half_h)))
+        # self.screen.blit(xycar_img, [X, Y])
 
     def rtn_car(self, x, y, yaw):
         w, h = 162, 93
@@ -160,3 +167,80 @@ class render:
         #_, img = self.PIL2PygameIMG(self.colorvImage, yaw, int(round(half_w)), int(round(half_h)))
         
         return X, Y, img
+
+
+
+if __name__ == "__main__":
+    R = render()
+    R.set_carImg("image/car.png", "image/car.jpg")
+
+    from map import map
+    M = map()
+
+    png = "maps/main_map.png"
+    yml = "maps/main_map.yaml"
+    w, h, conf = M.map_read(png, yml)
+    xymap = M.get_map()
+
+    from car import car
+    xycar = car()
+    random_init = r = False
+    xymap_info = M.get_map_info()
+    xycar.set_random(r)
+    xycar.set_init_location([100], [100], random_init)
+    xycar.set_init_yaw([0], random_init)
+    xycar.set_init_detect_device_us()
+
+    xycar.set_screen_size(w, h)
+    M.set_map_obstacle()
+
+
+    xycar.set_velocity(1000)
+
+    R.pygame_init()
+    R.pygame_display_set_caption("simulator")
+
+    R.pygame_screen(w, h)
+    screen = R.screen
+
+    xycar.set_screen(R.screen)
+    
+    R.pygame_clock()
+    clock = R.clock
+    
+    i = 0
+
+    xycar.set_restart()
+    i = 0
+    delta = 1
+    while not R.exit:
+        R.draw_background()
+        R.draw_map(xymap)
+
+        x, y = xycar.get_location()
+
+        dt = clock.get_time() / 1000.0
+        xycar.set_gear("D", 100)
+        xycar.set_accel_padal(True)
+        xycar.set_steering_angle(i + delta)
+        xycar.update(R.calculate_dt())
+
+        R.pygame_exit_check()
+        R.draw_car(int(x), int(y), xycar.get_yaw())
+
+        mx, my, mw, mh, mangle = xycar.get_left_front_wheel()
+        R.draw_wheel(mx, my, mw, mh, mangle)
+        mx, my, mw, mh, mangle = xycar.get_left_back_wheel()
+        R.draw_wheel(mx, my, mw, mh, mangle)
+        mx, my, mw, mh, mangle = xycar.get_right_front_wheel()
+        R.draw_wheel(mx, my, mw, mh, mangle)
+        mx, my, mw, mh, mangle = xycar.get_right_back_wheel()
+        R.draw_wheel(mx, my, mw, mh, mangle)
+
+        R.pygame_display_flip(clock.get_time())
+
+        x, y = xycar.get_location()
+        i += delta
+        if i < -15 or i > 15:
+            delta *= -1
+        
