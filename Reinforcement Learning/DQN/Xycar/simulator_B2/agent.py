@@ -12,6 +12,14 @@ def get_rotate_mtx(yaw):
         [-np.sin(yaw), np.cos(yaw)]])
 
 
+def normalize_radian(rad):
+    while rad < -np.pi:
+        rad += 2 * np.pi
+    while np.pi < rad:
+        rad -= 2 * np.pi
+    return rad
+
+
 class Car(object):
     def __init__(self):
         # 현재 위치/방향/steering 정보
@@ -26,7 +34,7 @@ class Car(object):
         # 제한 속도/가속도/steering 정보
         self.max_velocity = 100.0
         self.max_acceleration = 50.0
-        self.max_steering_deg = 15.0
+        self.max_steering_deg = 30.0
 
         # 기어 정보
         self.DRIVE = 1
@@ -34,7 +42,7 @@ class Car(object):
         self.NEUTRAL = 3
 
         # 기어를 선택할 때, 가속도 증가량
-        self.delta_acc = 100
+        self.delta_acc = 50
 
         # steering을 조절할 때, angle 증가량
         self.delta_steering_deg = 200
@@ -57,7 +65,7 @@ class Car(object):
         self.border_front = 62
         self.border_left = 31
         self.border_right = 31
-        
+
 
     # 차체 초음파 센서 정보
     # - return: (x, y, yaw)의 리스트
@@ -67,18 +75,21 @@ class Car(object):
         #   |   |         x          |  U
         #   | ==+==---------------==+== U
         #   +---+---------U---------+---+
-        x, y = self.position
-        ultrasonic1 = (x,       y - 22, np.radians( 90))
-        ultrasonic2 = (x + 60,  y - 22, np.radians( 35))
-        ultrasonic3 = (x + 60,  y,      np.radians(  0))
-        ultrasonic4 = (x + 60,  y + 22, np.radians(-35))
-        ultrasonic5 = (x,       y + 22, np.radians(-90))
+        front_gap = 10
+        mtx = get_rotate_mtx(-self.yaw)
+
+        ultrasonic_pos1 = np.dot([0, -self.border_left], mtx)
+        ultrasonic_pos2 = np.dot([self.border_front, -self.border_left+front_gap], mtx)
+        ultrasonic_pos3 = np.dot([self.border_front, 0], mtx)
+        ultrasonic_pos4 = np.dot([self.border_front, self.border_right-front_gap], mtx)
+        ultrasonic_pos5 = np.dot([0, self.border_right], mtx)
+
         return (
-            ultrasonic1,
-            ultrasonic2,
-            ultrasonic3,
-            ultrasonic4,
-            ultrasonic5
+            (ultrasonic_pos1 + self.position, normalize_radian(np.radians(-90) - self.yaw)),
+            (ultrasonic_pos2 + self.position, normalize_radian(np.radians(-30) - self.yaw)),
+            (ultrasonic_pos3 + self.position, normalize_radian(np.radians(0) - self.yaw)),
+            (ultrasonic_pos4 + self.position, normalize_radian(np.radians(30) - self.yaw)),
+            (ultrasonic_pos5 + self.position, normalize_radian(np.radians(90) - self.yaw))
         )
 
 
@@ -100,7 +111,7 @@ class Car(object):
 
     def update(self, gear, steering_deg, dt):
         # steering 계산
-        self.steering_deg = self.steering_deg + np.sign(steering_deg) * self.delta_steering_deg * dt
+        # self.steering_deg = self.steering_deg + np.sign(steering_deg) * self.delta_steering_deg * dt
         self.steering_deg = max(-self.max_steering_deg, min(steering_deg, self.max_steering_deg))
 
         # 가속도 계산
@@ -125,6 +136,7 @@ class Car(object):
 
         # yaw 갱신
         self.yaw += angular_velocity * dt
+        self.yaw = normalize_radian(self.yaw)
 
         # 현재 위치 갱신
         x, y = self.position
@@ -218,3 +230,47 @@ class Car(object):
             rotated_border + rotated_left_wheel + self.position,
             rotated_border + rotated_right_wheel + self.position)
     
+
+    def get_ultrasonic_distance(self, env):
+        x, y = self.position
+
+        distances = []
+        start_end_pos = []
+
+        for (ultra_x, ultra_y), ultra_yaw in self.get_ultrasonic_pos_with_yaw():
+            here_x, here_y = ultra_x, ultra_y
+            gradient = np.tan(ultra_yaw)
+            
+            if -np.pi/2 < ultra_yaw < np.pi/2:
+                sign = 0.7
+            else:
+                sign = -0.7
+
+            if np.abs(gradient) >= 100:
+                gradient = np.sign(gradient) * 100
+                sign = np.sign(sign) * 0.005
+
+            here_x, here_y = ultra_x, ultra_y
+            while True:
+                round_x = np.rint(here_x).astype(np.int16)
+                round_y = np.rint(here_y).astype(np.int16)
+                
+                if not env.in_range((round_x, round_y)):
+                    break
+
+                next_x = here_x + sign
+                next_y = gradient * (next_x - ultra_x) + ultra_y
+
+                next_round_x = np.rint(next_x).astype(np.int16)
+                next_round_y = np.rint(next_y).astype(np.int16)
+
+                if env.in_range((next_round_x, next_round_y))  \
+                and env.MAP[next_round_y, next_round_x] == env.WALL:
+                    break
+
+                here_x, here_y = next_x, next_y
+            
+            dist = np.sqrt((here_x - ultra_x)**2 + (here_y - ultra_y)**2)
+            distances.append(dist)
+            start_end_pos.append(((ultra_x, ultra_y), (here_x, here_y)))
+        return distances, start_end_pos

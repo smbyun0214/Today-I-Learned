@@ -46,8 +46,8 @@ class Environment(object):
         self.BLACK = (0, 0, 0)
         self.WHITE = (255, 255, 255)
         self.RED = (255, 0, 0)
-        self.BLUE = (0, 255, 0)
-        self.GREEN = (0, 0, 255)
+        self.GREEN = (0, 255, 0)
+        self.BLUE = (0, 0, 255)
 
         # Pygame 초기화 및 화면 설정
         num_pass, num_fail = pygame.init()
@@ -216,53 +216,20 @@ class Environment(object):
         return 0 <= x < self.WIDTH and 0 <= y < self.HEIGHT
 
 
-    def get_start_pos(self, car):
-        # scan_dy, scan_dx 설정
-        scan_dist = np.sqrt(car.border_front**2 + car.border_left**2)
-        scan_dist = int(scan_dist)
-        scan_dxs = [
-            car.border_front, car.border_front, -car.border_back, -car.border_back,
-            -car.border_left, car.border_right, -car.border_left, car.border_right]
-        scan_dys = [
-            -car.border_left, car.border_right, -car.border_left, car.border_right,
-            car.border_front, car.border_front, -car.border_back, -car.border_back]
-
-        # 탐색을 시작하기 가능한 좌표인지 확인
-        def is_valid_pos(pos):
-            x, y = pos
-            if not self.in_range(pos) or self.MAP[y, x] == self.WALL:
-                return False
-
-            for scan_dy, scan_dx in zip(scan_dys, scan_dxs):
-                next_scan_y, next_scan_x = y + scan_dy, x + scan_dx
-                next_scan_pos = (next_scan_x, next_scan_y)
-
-                if not self.in_range(next_scan_pos)  \
-                or self.MAP[next_scan_y, next_scan_x] == self.WALL:
-                    return False
-            return True
-
-        # 방문 좌표, 후보 좌표 리스트
-        cand_pos = []
-
-        for (y, x), _ in np.ndenumerate(self.MAP):
-            pos = (x, y)
-            if is_valid_pos(pos):
-                cand_pos.append(pos)
-                        
-        return cand_pos
-
-
-    def render(self, car):
+    def render(self, car, draw_all=False):
         self.tick_ms = self.clock.tick(self.fps)
         self.draw_background()
         self.draw_map()
-        self.draw_car(car)
         self.draw_car_wheel(car)
-        # self.draw_car_border(car)
-        self.draw_car_wheel_border(car)
-        pygame.draw.circle(self.screen, self.BLACK, car.position, 5)
+        self.draw_car(car)
+
+        if draw_all:
+            self.draw_car_border(car)
+            self.draw_car_wheel_border(car)
+            self.draw_ultrasonic(car)
+            pygame.draw.circle(self.screen, self.GREEN, car.position, 5)
         pygame.display.flip()
+
 
 
     # def play(self):
