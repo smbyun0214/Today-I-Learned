@@ -1,6 +1,7 @@
 import os
 import pygame
 import numpy as np
+import cv2 as cv
 
 
 def get_rotate_mtx(yaw):
@@ -11,9 +12,10 @@ def get_rotate_mtx(yaw):
 
 class Environment(object):
     def __init__(self, map, pixel=50, fps=10):
+        self.script_dir = os.path.dirname(__file__) 
+
         # 맵 정보 불러오기
-        script_dir = os.path.dirname(__file__) 
-        map_path = os.path.join(script_dir, "map", map)
+        map_path = os.path.join(self.script_dir, "map", map)
         self.RAW_MAP = []
         with open(map_path) as f:
             for row in f:
@@ -27,19 +29,23 @@ class Environment(object):
         self.PIXEL = pixel
 
         # 맵 정보 가공
-        self.WALL = True
-        self.ROAD = False
-        self.MAP = np.zeros((self.HEIGHT, self.WIDTH), dtype=bool)
+        self.WALL = 0
+        self.ROAD = 1
+        self.GOAL = 2
+
+        self.goal_pos = []
+        self.MAP = np.zeros((self.HEIGHT, self.WIDTH), dtype=np.int8)
         for y, row in enumerate(self.RAW_MAP):
             for x, val in enumerate(row):
                 if val == "#":
                     self.MAP[y*self.PIXEL:(y+1)*self.PIXEL, x*self.PIXEL:(x+1)*self.PIXEL] = self.WALL
+                elif val == "G":
+                    self.MAP[y*self.PIXEL:(y+1)*self.PIXEL, x*self.PIXEL:(x+1)*self.PIXEL] = self.GOAL
                 else:
                     self.MAP[y*self.PIXEL:(y+1)*self.PIXEL, x*self.PIXEL:(x+1)*self.PIXEL] = self.ROAD
 
-
         # Xycar 이미지 불러오기
-        xycar_img_path = os.path.join(script_dir, "resources", "xycar.png")
+        xycar_img_path = os.path.join(self.script_dir, "resources", "xycar.png")
         self.xycar_surface = pygame.image.load(xycar_img_path)
 
         # 색상 설정
@@ -50,8 +56,7 @@ class Environment(object):
         self.BLUE = (0, 0, 255)
 
         # Pygame 초기화 및 화면 설정
-        num_pass, num_fail = pygame.init()
-        self.screen = pygame.display.set_mode((self.WIDTH, self.HEIGHT))
+        self.screen = None
 
         # 에피소드가 진행 여부
         self.is_done = False
@@ -60,6 +65,119 @@ class Environment(object):
         self.fps = fps
         self.clock = pygame.time.Clock()
         self.tick_ms = self.clock.tick(self.fps)
+        self.dt = 1 / self.fps
+
+        # 이미지 저장을 위한 맵 정보
+        self.MAP_3C = np.zeros((self.HEIGHT, self.WIDTH, 3), dtype=np.uint8)
+        for y, row in enumerate(self.RAW_MAP):
+            for x, val in enumerate(row):
+                if val == "#":
+                    self.MAP_3C[y*self.PIXEL:(y+1)*self.PIXEL, x*self.PIXEL:(x+1)*self.PIXEL] = [0, 0, 0]
+                else:
+                    self.MAP_3C[y*self.PIXEL:(y+1)*self.PIXEL, x*self.PIXEL:(x+1)*self.PIXEL] = [255, 255, 255]
+
+        # 이미지를 저장하기 위한 차량 위치 정보
+        self.save_data = []
+
+
+    def status(self, car):
+        border_pos = car.get_border_pos()
+        border_pos = np.rint(border_pos).astype(np.int16)
+
+        is_goal = False
+
+        for pos in border_pos:
+            x, y = pos
+
+            if not self.in_range(pos)    \
+            or self.MAP[y, x] == self.WALL:
+                return self.WALL
+            elif self.MAP[y, x] == self.GOAL:
+                is_goal = True
+        
+        if is_goal:
+            return self.GOAL
+
+        return self.ROAD
+
+
+    def in_range(self, pos):
+        x, y = pos
+        return 0 <= x < self.WIDTH and 0 <= y < self.HEIGHT
+
+
+    def get_random_pos_and_yaw(self, car):
+        car.velocity = 0
+        car.acceleration = 0
+
+        # 무작위로 선택된 위치의 차량 설정
+        while True:
+            random_x = np.random.uniform(0, self.WIDTH)
+            random_y = np.random.uniform(0, self.HEIGHT)
+            random_yaw = np.random.uniform(0, 2*np.pi)
+
+            car.position = (random_x, random_y)
+            car.yaw = random_yaw
+
+            if self.status(car) == self.ROAD:
+                break
+        
+        return (random_x, random_y), random_yaw
+
+
+    def save_pos_and_image(self, car, init=False):
+        if init:
+            self.save_data = []
+            
+        rotated_surf = pygame.transform.rotate(self.xycar_surface, np.degrees(car.yaw))
+
+        delta_x = (self.xycar_surface.get_width() - rotated_surf.get_width()) // 2
+        delta_y = (self.xycar_surface.get_height() - rotated_surf.get_height()) // 2
+
+        center_x, center_y = car.position
+        x = center_x - self.xycar_surface.get_width()//2
+        y = center_y - self.xycar_surface.get_height()//2
+
+        rotated_x = np.rint(x + delta_x).astype(np.int16)
+        rotated_y = np.rint(y + delta_y).astype(np.int16)
+        rotated_pos = (rotated_x, rotated_y)
+        self.save_data.append((rotated_pos, pygame.surfarray.array3d(rotated_surf).swapaxes(0, 1)[:,:,::-1]))
+
+
+    def save_video(self, episode):
+        video_dir = os.path.join(self.script_dir, "video")
+        if not os.path.isdir(video_dir):
+            os.mkdir(video_dir)
+        video_path = os.path.join(video_dir, "{:05}.avi".format(episode))
+        
+
+        print("[VIDEO SAVE] {:05}.avi...".format(episode))
+
+        fourcc = cv.VideoWriter_fourcc(*"XVID")
+        writer = cv.VideoWriter(video_path, fourcc, self.fps, (self.WIDTH, self.HEIGHT))
+        
+        for (x, y), image in self.save_data:
+            img_height, img_width = image.shape[:2]
+
+            frame = np.copy(self.MAP_3C)
+            roi = frame[y:y+img_height, x:x+img_width]
+
+            gray = cv.cvtColor(image, cv.COLOR_BGR2GRAY)
+            _, mask = cv.threshold(gray, 200, 255, cv.THRESH_BINARY_INV)
+            mask_inv = cv.bitwise_not(mask)
+
+            roi_bg = cv.bitwise_and(roi, roi, mask=mask_inv)
+            img_fg = cv.bitwise_and(image, image, mask=mask)
+
+            dst = cv.add(roi_bg, img_fg)
+            frame[y:y+img_height, x:x+img_width] = dst
+            cv.putText(frame, "Episode: {:05}".format(episode), (10, 100), cv.FONT_HERSHEY_DUPLEX, 1, (255, 255, 0), 2)
+            writer.write(frame)
+
+        writer.release()
+    
+        print("[VIDEO SAVE DONE]".format(episode))
+        self.save_data = []
 
 
     def draw_map(self):
@@ -73,10 +191,6 @@ class Environment(object):
 
     def draw_background(self):
         self.screen.fill(self.BLACK)
-
-
-    def get_dt(self):
-        return 1 / self.fps
 
 
     def draw_car(self, car):
@@ -200,23 +314,11 @@ class Environment(object):
             pygame.draw.circle(self.screen, self.BLUE, pos, 1)
 
 
-    def is_collision(self, car):
-        border_pos = car.get_border_pos()
-        border_pos = np.rint(border_pos).astype(np.int16)
-        for pos in border_pos:
-            x, y = pos
-            if not self.in_range(pos)    \
-            or self.MAP[y, x] == self.WALL:
-                return True
-        return False
-
-
-    def in_range(self, pos):
-        x, y = pos
-        return 0 <= x < self.WIDTH and 0 <= y < self.HEIGHT
-
-
     def render(self, car, draw_all=False):
+        if self.screen is None:
+            num_pass, num_fail = pygame.init()
+            self.screen = pygame.display.set_mode((self.WIDTH, self.HEIGHT))
+
         self.tick_ms = self.clock.tick(self.fps)
         self.draw_background()
         self.draw_map()
@@ -232,24 +334,6 @@ class Environment(object):
 
 
 
-    # def play(self):
-    #     isPlay = True
-    #     while isPlay:
-    #         self.draw_background()
-    #         self.draw_map()
-    #         self.draw_car(self.cars)
-
-    #         pygame.display.flip()
-
-    #         for event in pygame.event.get():
-    #             # X를 눌렀으면, 게임을 종료
-    #             if event.type == pygame.QUIT:
-    #                 isPlay = False
-
-    #     # 게임종료한다.
-        # pygame.quit()
-    
-
 if __name__ == "__main__":
     from agent import Car
 
@@ -262,28 +346,20 @@ if __name__ == "__main__":
 
     # start_pos = env.get_start_pos(car)
 
+    episode = 0
     while not env.is_done:
         is_collision = False
 
-        # 무작위로 선택된 위치의 차량 설정
-        while True:
-            random_x = np.random.uniform(0, env.WIDTH)
-            random_y = np.random.uniform(0, env.HEIGHT)
-            random_yaw = np.random.uniform(0, np.pi)
+        random_pos, random_yaw = env.get_random_pos_and_yaw(car)
+        car.position = random_pos
+        car.yaw = random_yaw
 
-            car.position = (random_x, random_y)
-            car.yaw = random_yaw
-            car.velocity = 0
-            car.acceleration = 0
-
-            if not env.is_collision(car):
-                break
-
-
+        episode += 1
+        env.save_pos_and_image(car)
         while not is_collision and not env.is_done:
             env.render(car)
 
-            is_collision = env.is_collision(car)
+            is_collision = env.status(car) == env.WALL
 
             for event in pygame.event.get():
                 # X를 눌렀으면, 게임을 종료
@@ -293,9 +369,12 @@ if __name__ == "__main__":
                     is_collision = True
             
 
-            car.update(car.DRIVE, i, env.get_dt())
-            # car.update(car.NEUTRAL, i, env.get_dt())
-            print(car.velocity, car.acceleration, env.is_done, env.get_dt())
+            car.update(car.DRIVE, i, env.dt)
+            env.save_pos_and_image(car)
+            # car.update(car.NEUTRAL, i, env.dt)
+            # print(car.velocity, car.acceleration, env.is_done, env.dt)
             i += delta
             if i <= -15 or 15 <= i:
                 delta *= -1
+        
+        env.save_video(episode)

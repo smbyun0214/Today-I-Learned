@@ -273,4 +273,5 @@ class Car(object):
             dist = np.sqrt((here_x - ultra_x)**2 + (here_y - ultra_y)**2)
             distances.append(dist)
             start_end_pos.append(((ultra_x, ultra_y), (here_x, here_y)))
-        return distances, start_end_pos
+        
+        return np.array(distances), start_end_pos
