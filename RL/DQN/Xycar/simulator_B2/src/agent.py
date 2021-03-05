@@ -75,7 +75,7 @@ class Car(object):
         #   |   |         x          |  U
         #   | ==+==---------------==+== U
         #   +---+---------U---------+---+
-        front_gap = 10
+        front_gap = 15
         mtx = get_rotate_mtx(-self.yaw)
 
         ultrasonic_pos1 = np.dot([0, -self.border_left], mtx)
@@ -86,9 +86,9 @@ class Car(object):
 
         return (
             (ultrasonic_pos1 + self.position, normalize_radian(np.radians(-90) - self.yaw)),
-            (ultrasonic_pos2 + self.position, normalize_radian(np.radians(-30) - self.yaw)),
+            (ultrasonic_pos2 + self.position, normalize_radian(np.radians(-45) - self.yaw)),
             (ultrasonic_pos3 + self.position, normalize_radian(np.radians(0) - self.yaw)),
-            (ultrasonic_pos4 + self.position, normalize_radian(np.radians(30) - self.yaw)),
+            (ultrasonic_pos4 + self.position, normalize_radian(np.radians(45) - self.yaw)),
             (ultrasonic_pos5 + self.position, normalize_radian(np.radians(90) - self.yaw))
         )
 
@@ -231,7 +231,7 @@ class Car(object):
             rotated_border + rotated_right_wheel + self.position)
     
 
-    def get_ultrasonic_distance(self, env):
+    def get_ultrasonic_distance(self, env, ratio=None):
         x, y = self.position
 
         distances = []
@@ -271,7 +271,21 @@ class Car(object):
                 here_x, here_y = next_x, next_y
             
             dist = np.sqrt((here_x - ultra_x)**2 + (here_y - ultra_y)**2)
+
             distances.append(dist)
             start_end_pos.append(((ultra_x, ultra_y), (here_x, here_y)))
         
-        return np.array(distances), start_end_pos
+        distances = np.rint(np.array(distances) / 2)
+
+        if ratio:
+            distances = np.rint(distances * ratio)
+            
+        distances = np.clip(distances, 0, 200)
+
+        # 초음파 무작위 랜덤 값 적용
+        if np.random.sample() < 0.3:
+            rand_idx = np.random.choice(len(distances), size=np.rint(len(distances)/3.0).astype(np.int8), replace=False)
+            distances[rand_idx] += np.rint(np.random.normal(loc=0, scale=20, size=rand_idx.size))
+            distances = np.clip(distances, 0, 200)
+        
+        return distances, start_end_pos

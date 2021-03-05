@@ -1,0 +1,4 @@
+<launch>
+  <!-- ultrasonic -->
+  <node pkg="xycar_ultrasonic" type="xycar_ultrasonic.py" name="xycar_ultrasonic" output="screen" />
+</launch>

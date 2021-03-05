@@ -11,15 +11,17 @@ def get_rotate_mtx(yaw):
 
 
 class Environment(object):
-    def __init__(self, map, pixel=50, fps=10):
+    """
+    map_type: "label", "image"
+    """
+    def __init__(self, map, map_type="label", pixel=1, fps=10):
         self.script_dir = os.path.dirname(__file__) 
 
-        # 맵 정보 불러오기
-        map_path = os.path.join(self.script_dir, "map", map)
-        self.RAW_MAP = []
-        with open(map_path) as f:
-            for row in f:
-                self.RAW_MAP.append(row.strip())
+        # 맵 불러오기
+        if map_type == "label":
+            self._load_map_label(map)
+        else:
+            self._load_map_image(map)
     
         # 맵의 크기
         self.WIDTH = len(self.RAW_MAP[0]) * pixel
@@ -80,6 +82,30 @@ class Environment(object):
         self.save_data = []
 
 
+    def _load_map_label(self, map):
+        # 맵 정보 불러오기
+        map_path = os.path.join(self.script_dir, "map", map)
+        self.RAW_MAP = []
+        with open(map_path, "rb") as f:
+            for row in f:
+                self.RAW_MAP.append(row.strip())
+
+
+    def _load_map_image(self, map):
+        # 맵 정보 불러오기
+        map_path = os.path.join(self.script_dir, "map", map)
+        image = cv.imread(map_path, cv.IMREAD_GRAYSCALE)
+        _, binary = cv.threshold(image, 200, 255, cv.THRESH_BINARY)
+        # binary = cv.morphologyEx(binary, cv.MORPH_ERODE, cv.getStructuringElement(cv.MORPH_RECT, (3, 3)), iterations=10)
+
+        # height, width = binary.shape[:2]
+        # binary = cv.resize(binary, (width*2//3, height*2//3))
+
+        self.RAW_MAP = []
+        for row in binary:
+            raw_map_row = [ "#" if val == 0 else " " for val in row ]
+            self.RAW_MAP.append(raw_map_row)
+    
     def status(self, car):
         border_pos = car.get_border_pos()
         border_pos = np.rint(border_pos).astype(np.int16)
@@ -125,7 +151,7 @@ class Environment(object):
         return (random_x, random_y), random_yaw
 
 
-    def save_pos_and_image(self, car, init=False):
+    def save_pos_and_image(self, car, distances, init=False):
         if init:
             self.save_data = []
             
@@ -141,11 +167,11 @@ class Environment(object):
         rotated_x = np.rint(x + delta_x).astype(np.int16)
         rotated_y = np.rint(y + delta_y).astype(np.int16)
         rotated_pos = (rotated_x, rotated_y)
-        self.save_data.append((rotated_pos, pygame.surfarray.array3d(rotated_surf).swapaxes(0, 1)[:,:,::-1]))
+        self.save_data.append((rotated_pos, distances, pygame.surfarray.array3d(rotated_surf).swapaxes(0, 1)[:,:,::-1]))
 
 
-    def save_video(self, episode):
-        video_dir = os.path.join(self.script_dir, "video")
+    def save_video(self, episode, dir="video"):
+        video_dir = os.path.join(self.script_dir, dir)
         if not os.path.isdir(video_dir):
             os.mkdir(video_dir)
         video_path = os.path.join(video_dir, "{:05}.avi".format(episode))
@@ -153,25 +179,40 @@ class Environment(object):
 
         print("[VIDEO SAVE] {:05}.avi...".format(episode))
 
-        fourcc = cv.VideoWriter_fourcc(*"XVID")
+        fourcc = cv.VideoWriter_fourcc(*"mp4v")
         writer = cv.VideoWriter(video_path, fourcc, self.fps, (self.WIDTH, self.HEIGHT))
         
-        for (x, y), image in self.save_data:
-            img_height, img_width = image.shape[:2]
+        for (x, y), distances, car_img in self.save_data:
+            img_height, img_width = car_img.shape[:2]
 
             frame = np.copy(self.MAP_3C)
-            roi = frame[y:y+img_height, x:x+img_width]
 
-            gray = cv.cvtColor(image, cv.COLOR_BGR2GRAY)
+            cand_roi = frame[y:y+img_height, x:x+img_width]
+            cand_roi_height, cand_roi_width = cand_roi.shape[:2]
+
+            img_height, img_width = min(cand_roi_height, img_height), min(cand_roi_width, img_width)
+            roi = frame[y:y+img_height, x:x+img_width]
+            car_img = car_img[:img_height, :img_width]
+
+            if car_img.size == 0:
+                continue
+
+            gray = cv.cvtColor(car_img, cv.COLOR_BGR2GRAY)
             _, mask = cv.threshold(gray, 200, 255, cv.THRESH_BINARY_INV)
             mask_inv = cv.bitwise_not(mask)
 
             roi_bg = cv.bitwise_and(roi, roi, mask=mask_inv)
-            img_fg = cv.bitwise_and(image, image, mask=mask)
+            img_fg = cv.bitwise_and(car_img, car_img, mask=mask)
 
             dst = cv.add(roi_bg, img_fg)
             frame[y:y+img_height, x:x+img_width] = dst
             cv.putText(frame, "Episode: {:05}".format(episode), (10, 100), cv.FONT_HERSHEY_DUPLEX, 1, (255, 255, 0), 2)
+            
+            round_dists = np.round(distances, 1)
+            cv.putText(frame, "Distances: {}".format(round_dists), (10, 200), cv.FONT_HERSHEY_DUPLEX, 1, (255, 0, 255), 2)
+            
+            cv.putText(frame, "Pose: {}, {}".format(x, y), (10, 300), cv.FONT_HERSHEY_DUPLEX, 1, (255, 0, 255), 2)
+            
             writer.write(frame)
 
         writer.release()
@@ -337,7 +378,7 @@ class Environment(object):
 if __name__ == "__main__":
     from agent import Car
 
-    env = Environment("snake", fps=30)
+    env = Environment("rally_map.png", map_type="image", fps=30)
     car = Car()
     car.position = (100, 120)
 
@@ -350,27 +391,47 @@ if __name__ == "__main__":
     while not env.is_done:
         is_collision = False
 
-        random_pos, random_yaw = env.get_random_pos_and_yaw(car)
-        car.position = random_pos
-        car.yaw = random_yaw
+        # random_pos, random_yaw = env.get_random_pos_and_yaw(car)
+        # car.position = random_pos
+        # car.yaw = random_yaw
+        car.position = (130, 428)
+        car.yaw = np.radians(-135)
 
         episode += 1
-        env.save_pos_and_image(car)
+        
+        obs, _ = car.get_ultrasonic_distance(env)
+        env.save_pos_and_image(car, obs)
+
         while not is_collision and not env.is_done:
-            env.render(car)
+            # env.render(car)
 
             is_collision = env.status(car) == env.WALL
+            # print(car.get_ultrasonic_distance(env)[0])
 
-            for event in pygame.event.get():
-                # X를 눌렀으면, 게임을 종료
-                if event.type == pygame.QUIT:
-                    env.is_done = True
-                if event.type == pygame.KEYDOWN and event.key == pygame.K_q:
-                    is_collision = True
+            # for event in pygame.event.get():
+            #     # X를 눌렀으면, 게임을 종료
+            #     if event.type == pygame.QUIT:
+            #         env.is_done = True
+            #     if event.type == pygame.KEYDOWN and event.key == pygame.K_q:
+            #         is_collision = True
+
+            # pressed = pygame.key.get_pressed()
+            # if pressed[pygame.K_LEFT]:
+            #     angle += 5
+            # elif pressed[pygame.K_RIGHT]:
+            #     angle -= 5
+            # if pressed[pygame.K_UP]:
+            #     drive = car.DRIVE
+            # elif pressed[pygame.K_DOWN]:
+            #     drive = car.REVERSE
+            # elif pressed[pygame.K_s]:
+            #     drive = car.NEUTRAL
+            #     car.velocity = 0
             
-
             car.update(car.DRIVE, i, env.dt)
-            env.save_pos_and_image(car)
+            obs, _ = car.get_ultrasonic_distance(env)
+            env.save_pos_and_image(car, obs)
+            
             # car.update(car.NEUTRAL, i, env.dt)
             # print(car.velocity, car.acceleration, env.is_done, env.dt)
             i += delta
