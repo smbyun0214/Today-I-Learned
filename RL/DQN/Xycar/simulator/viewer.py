@@ -1,7 +1,13 @@
 import os
 import numpy as np
 import cv2 as cv
-from car import Car
+from simulator.car import Car
+
+
+RED = (0, 0, 255)
+GREEN = (0, 255, 0)
+BLUE = (255, 0, 0)
+
 
 def get_rotation_matrix(yaw):
     return np.array([
@@ -13,9 +19,10 @@ def rint(point):
     return np.rint(point).astype(np.int32)
 
 
-RED = (0, 0, 255)
-GREEN = (0, 255, 0)
-BLUE = (255, 0, 0)
+def in_range(map, x, y):
+    height, width = map.shape[:2]
+    return 0 <= x < width and 0 <= y < height
+
 
 def draw_car(image, car):
     """차량의 테두리와 바퀴를 그리는 함수
@@ -24,155 +31,106 @@ def draw_car(image, car):
         image: 배경 이미지
         car: 차량 객체
     """
-    # 차량의 모서리 좌표
-    points = [[
-        [-car.border_back, -car.border_left],       # 좌측 후방
-        [car.border_front, -car.border_left],       # 좌측 전방
-        [car.border_front, car.border_right],       # 우측 전방
-        [-car.border_back, car.border_right]        # 우측 후방
-    ]]
-
-    # 현재 차량 방향의 회전변환행렬
-    mtx1 = get_rotation_matrix(car.yaw)
-
-    # 회전이 적용된 차량의 모서리 좌표
-    rotated_points = np.dot(points, mtx1)
-    
-    # 차량의 위치 적용
-    rotated_points += car.position
-
     # 차량 그리기
-    rotated_points = rint(rotated_points)
-    cv.polylines(image, rotated_points, True, BLUE)
-
-
-    # 바퀴 1개의 모서리 좌표
-    border_points = [
-        [-car.wheel_length/2, -car.wheel_width/2],
-        [car.wheel_length/2, -car.wheel_width/2],
-        [car.wheel_length/2, car.wheel_width/2],
-        [-car.wheel_length/2, car.wheel_width/2]
-    ]
-
-    # 차량 기준, 바퀴 위치 좌표
-    front_points = [
-        [car.wheel_front, -car.wheel_left],     # 전방 좌측
-        [car.wheel_front, car.wheel_right]      # 전방 우측
-    ]
-    back_points = [
-        [-car.wheel_back, -car.wheel_left],     # 후방 좌측
-        [-car.wheel_back, car.wheel_right]      # 후방 우측
-    ]
-
-    # 현재 바퀴 방향의 회전변환행렬
-    steering_rad = np.radians(car.steering_deg)
-    mtx2 = get_rotation_matrix(car.yaw + steering_rad)
-    
-    # 회전이 적용된 바퀴의 모서리 좌표
-    rotated_border_points1 = np.dot(border_points, mtx1)  # 차량의 방향만 적용
-    rotated_border_points2 = np.dot(border_points, mtx2)  # 차량의 방향 + steering_rad가 적용
-
-    # 회전이 적용된 바퀴 위치 좌표
-    rotated_front_points = np.dot(front_points, mtx1)
-    rotated_back_points = np.dot(back_points, mtx1)
-
-    # 모든 회전이 적용된 바퀴의 모서리 좌표
-    rotated_front_points = np.array([ rotated_border_points2 + pt for pt in rotated_front_points ])
-    rotated_back_points = np.array([ rotated_border_points1 + pt for pt in rotated_back_points ])
-
-    # 차량의 위치 적용
-    rotated_front_points += car.position
-    rotated_back_points += car.position
+    border_points = car.get_border_points()
+    cv.polylines(image, rint([border_points]), True, BLUE)
 
     # 바퀴 그리기
-    rotated_front_points = rint(rotated_front_points)
-    rotated_back_points = rint(rotated_back_points)
-    cv.fillPoly(image, rotated_front_points, RED)
-    cv.polylines(image, rotated_back_points, True, RED)
+    front_border_points = car.get_front_wheel_border_points()
+    back_border_points = car.get_back_wheel_border_points()
+    cv.fillPoly(image, rint(front_border_points), RED)
+    cv.polylines(image, rint(back_border_points), True, RED)
 
 
-def draw_car_detail(image, car):
-    """어떤 기준으로 차량이 움직이는지 나타내는 함수
+def draw_ultrasonic(image, car, map):
+    """차량에 부착된 초음파센서를 그리는 함수
 
     Args:
         image: 배경 이미지
         car: 차량 객체
     """
-    # 바퀴 1개의 모서리 좌표
-    border_points = [
-        [-car.wheel_length/2, -car.wheel_width/2],
-        [car.wheel_length/2, -car.wheel_width/2],
-        [car.wheel_length/2, car.wheel_width/2],
-        [-car.wheel_length/2, car.wheel_width/2]
-    ]
+    start_points, end_points, yaws = get_ultrasonic_distance(map, car)
 
-    # 차량 기준, 바퀴 위치 좌표
-    front_points = [
-        [car.wheel_front, 0]        # 전방 중앙
-    ]
-    back_points = [
-        [-car.wheel_back, 0]        # 후방 중앙
-    ]
+    # 초음파센서의 위치 그리기
+    for pt1, theta in zip(start_points, yaws):
+        cv.circle(image, tuple(rint(pt1)), 1, GREEN, 3)
 
-    # 현재 차량 방향의 회전변환행렬
-    mtx1 = get_rotation_matrix(car.yaw)
+    # 초음파센서의 탐색 거리 그리기
+    for pt1, pt2 in zip(start_points, end_points):
+        cv.line(image, tuple(rint(pt1)), tuple(rint(pt2)), GREEN)
 
-    # 현재 바퀴 방향의 회전변환행렬
-    steering_rad = np.radians(car.steering_deg)
-    mtx2 = get_rotation_matrix(car.yaw + steering_rad)
+
+def get_ultrasonic_distance(map, car):
+    """차량에 부착된 초음파센서가 거리를 측정할 때, 탐색 영역의 끝점을 계산하는 함수
+
+    Args:
+        map: 장애물이 있는 지도
+        car: 차량 객체
+    """
+    start_points, yaws = car.get_ultrasonic_pos_and_yaw()
+    end_points = []
     
-    # 회전이 적용된 바퀴의 모서리 좌표
-    rotated_border_points1 = np.dot(border_points, mtx1)  # 차량의 방향만 적용
-    rotated_border_points2 = np.dot(border_points, mtx2)  # 차량의 방향 + steering_rad가 적용
+    for (x1, y1), yaw in zip(start_points, yaws):
+        # 초음파 탐색 기울기
+        gradient = np.tan(yaw)
 
-    # 회전이 적용된 바퀴 위치 좌표
-    rotated_front_points = np.dot(front_points, mtx1)
-    rotated_back_points = np.dot(back_points, mtx1)
+        # 초음파 탐색 좌표 계산
+        if abs(gradient) >= car.max_ultrasonic_seek_pixel:
+            xs = np.full(rint(car.max_ultrasonic_seek_pixel), x1)
+            ys = np.linspace(y1, y1 + np.sign(gradient)*car.max_ultrasonic_seek_pixel, num=rint(car.max_ultrasonic_seek_pixel), endpoint=True)
+        else:
+            xs = np.linspace(
+                x1, x1 + car.max_ultrasonic_seek_pixel*np.cos(yaw),
+                num=rint(car.max_ultrasonic_seek_pixel), endpoint=True)
+            ys = gradient*(xs - x1) + y1
 
-    # 모든 회전이 적용된 바퀴의 모서리 좌표
-    rotated_points = np.array(
-        [ rotated_border_points1 + pt for pt in rotated_back_points ]   \
-      + [ rotated_border_points2 + pt for pt in rotated_front_points ])
+        # 초음파가 장애물에 부딪힌 지점 계산
+        prev_x2 = xs[0]
+        prev_y2 = ys[0]
+        for (x2, y2) in zip(xs, ys):
+            x2 = rint(x2)
+            y2 = rint(y2)
+            # 맵에 있는 충돌 영역에 맞닿아있을 경우, 해당 좌표를 부딪힌 지점으로 설정
+            if in_range(map, x2, y2):
+                if not np.array_equal(map[y2, x2], [255, 255, 255]):
+                    end_points.append((x2, y2))
+                    break
+            # 부딪히는 지점이 없을 경우, max_ultrasonic_seek_pixel만큼 떨어진 위치를 한계 탐색 지점으로 설정
+            else:
+                end_points.append((prev_x2, prev_y2))
+                break
+            prev_x2 = x2
+            prev_y2 = y2
+        else:
+            end_points.append((xs[-1], ys[-1]))
 
-    # 차량의 위치 적용
-    rotated_points += car.position
-
-    # 바퀴 그리기
-    rotated_points = rint(rotated_points)
-    cv.polylines(image, rotated_points, True, GREEN)
+    end_points = np.array(end_points)
+    return start_points, end_points, yaws
 
 
-    # 직선 좌표
-    front_point1 = [0, -150]
-    front_point2 = [0, 150]
-    back_point1 = [0, -150]
-    back_point2 = [0, 150]
+def is_collision(map, car):
+    border_points = car.get_border_points()
 
-    # 차량의 회전이 적용된 직선 좌표
-    rotated_back_point1 = np.dot(back_point1, mtx1)
-    rotated_back_point2 = np.dot(back_point2, mtx1)
-    rotated_front_point1 = np.dot(front_point1, mtx2)
-    rotated_front_point2 = np.dot(front_point2, mtx2)
+    # 차량 모서리 좌표를 한개 더 추가
+    border_points = np.append(border_points, [border_points[0]], axis=0)
+    
+    # 각 면에서 충돌 검사에 사용할 점의 갯수
+    nums = [
+        car.border_length + 1,      # 좌측 길이
+        car.border_width + 1,       # 전방 폭
+        car.border_length + 1,      # 우측 길이
+        car.border_width + 1,       # 후방 폭
+    ]
 
-    # 바퀴의 위치 적용
-    rotated_front_point1 += rotated_front_points[0]
-    rotated_front_point2 += rotated_front_points[0]
-    rotated_back_point1 += rotated_back_points[0]
-    rotated_back_point2 += rotated_back_points[0]
+    # 점과 맵의 충돌 영역 검사
+    for pt1, pt2, num in zip(border_points[:-1], border_points[1:], nums):
+        xs = rint(np.linspace(pt1[0], pt2[0], num=num, endpoint=True))
+        ys = rint(np.linspace(pt1[1], pt2[1], num=num, endpoint=True))
 
-    # 차량의 위치 적용
-    rotated_front_point1 += car.position
-    rotated_front_point2 += car.position
-    rotated_back_point1 += car.position
-    rotated_back_point2 += car.position
-
-    # 직선 그리기
-    rotated_front_point1 = tuple(rint(rotated_front_point1))
-    rotated_front_point2 = tuple(rint(rotated_front_point2))
-    rotated_back_point1 = tuple(rint(rotated_back_point1))
-    rotated_back_point2 = tuple(rint(rotated_back_point2))
-    cv.line(image, rotated_front_point1, rotated_front_point2, RED)
-    cv.line(image, rotated_back_point1, rotated_back_point2, RED)
+        for x, y in zip(xs, ys):
+            if in_range(map, x, y) and not np.array_equal(map[y, x], [255, 255, 255]):
+                return True
+    return False
 
 
 
@@ -181,15 +139,21 @@ if __name__ == "__main__":
     gear = car.BREAK
     steering_deg = 0
 
+    background_origin = cv.imread("map/rally_map3.png")
     # 1초 = 1000ms
     # 30fps = 1000/30
     delay = 1000//30
     while True:
-        background = np.ones((1000, 1000, 3), dtype=np.uint8) * 255
+        background = background_origin.copy()
         draw_car(background, car)
         # draw_car_detail(background, car)
+        # draw_ultrasonic(background, car, background_origin)            
         cv.imshow("simulator", background)
-        
+
+        if is_collision(background_origin, car):
+            car.position = (500, 500)
+            car.yaw = np.radians(0)
+
         key = cv.waitKey(delay)
         if key == ord("q"):
             break

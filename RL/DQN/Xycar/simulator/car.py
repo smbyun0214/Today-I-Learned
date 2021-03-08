@@ -44,6 +44,7 @@ class Car(object):
         #   |   |         x          |  |
         #   | ==+==---------------==+== |
         #   +---+-------------------+---+
+        self.meter_per_pixel = 1 / 210
         self.border_width = 63      # 차량 폭
         self.border_length = 126    # 차량 길이
 
@@ -67,8 +68,11 @@ class Car(object):
         self.REVERSE = 2    # 차량 후진 기어
         self.BREAK = 3      # 차량 정지 기어
 
+        self.max_ultrasonic_seek_meter = 2
+        self.max_ultrasonic_seek_pixel = self.max_ultrasonic_seek_meter / self.meter_per_pixel
 
-    def get_ultrasonic_pos_with_yaw(self):
+
+    def get_ultrasonic_pos_and_yaw(self):
         """현재 차량에 부착되어 있는 초음파센서의 위치정보(position)와 방향정보(yaw)를 반환
 
         차량의 형태가 아래와 같을 때, **U**는 초음파의 위치를 나타낸다.
@@ -82,7 +86,8 @@ class Car(object):
             list: 차량에 부탁되어 있는 초음파센서의 위치 정보((x, y))
             list: 차량에 부탁되어 있는 초음파센서의 방향 정보(yaw)
         """
-        mtx = get_rotation_matrix(self.yaw)  # yaw 방향의 회전변환행렬
+        # yaw 방향의 회전변환행렬
+        mtx = get_rotation_matrix(self.yaw)
 
         ultrasonic_pos = [
             [0, -self.border_left],                     # 1번 초음파센서 위치(좌측)
@@ -92,17 +97,24 @@ class Car(object):
             [0, self.border_right]                      # 5번 초음파센서 위치(우측)
         ]
 
-        ultrasonic_yaw = [
+        ultrasonic_yaw = np.array([
             np.radians(-90),        # 1번 초음파센서 방향(-90)
             np.radians(-30),        # 2번 초음파센서 방향(-30)
             np.radians(0),          # 3번 초음파센서 방향(0)
             np.radians(30),         # 4번 초음파센서 방향(30)
             np.radians(90),         # 5번 초음파센서 방향(90)
-        ]
+        ])
 
-        rotated_ultrasonic_pos = np.dot(ultrasonic_pos, mtx)    # yaw 방향 회전이 적용된 초음파센서 위치
+        # yaw 방향 회전이 적용된 초음파센서 위치
+        rotated_ultrasonic_pos = np.dot(ultrasonic_pos, mtx)
+
+        # 차량의 위치 적용
+        rotated_ultrasonic_pos += self.position
+
+        # 초음파센서 방향 계산
         rotated_ultrasonic_yaw = ultrasonic_yaw + self.yaw
-
+        rotated_ultrasonic_yaw = [ normalize_radian(rotated_yaw) for rotated_yaw in rotated_ultrasonic_yaw ]
+        
         return rotated_ultrasonic_pos, rotated_ultrasonic_yaw
 
 
@@ -145,147 +157,90 @@ class Car(object):
         self.yaw = normalize_radian(self.yaw)
     
 
-    def get_border_pos(self):
-        # x 좌표 취득
-        width = self.border_front + self.border_back
-        xs = np.linspace(-self.border_back, self.border_front, width, endpoint=True).reshape((-1, 1))
+    def get_border_points(self):
+        # 차량의 모서리 좌표
+        points = [
+            [-self.border_back, -self.border_left],     # 좌측 후방
+            [self.border_front, -self.border_left],     # 좌측 전방
+            [self.border_front, self.border_right],     # 우측 전방
+            [-self.border_back, self.border_right]      # 우측 후방
+        ]
 
-        # y 좌표 취득
-        height = self.border_left + self.border_right
-        ys = np.linspace(-self.border_left, self.border_right, height, endpoint=True).reshape((-1, 1))
+        # 현재 차량 방향의 회전변환행렬
+        mtx = get_rotation_matrix(self.yaw)
 
-        # 외곽 좌표 취득
-        up_pos = np.insert(xs, 1, ys[0,0], axis=1)
-        down_pos = np.insert(xs, 1, ys[-1,-1], axis=1)
-        left_pos = np.insert(ys, 0, xs[0,0], axis=1)
-        right_pos = np.insert(ys, 0, xs[-1,-1], axis=1)
-
-        # Affine 회전
-        affine_mtx = get_rotate_mtx(-self.yaw)
-        rotated_border = np.dot(np.vstack((up_pos, down_pos, left_pos, right_pos)), affine_mtx)
-
-        return rotated_border + self.position
+        # 회전이 적용된 차량의 모서리 좌표
+        rotated_points = np.dot(points, mtx)
+        
+        # 차량의 위치 적용
+        rotated_points += self.position
+        return rotated_points
 
 
-    def get_front_wheel_border_pos(self):
-        # x 좌표 취득
-        xs = np.linspace(-self.wheel_width//2, self.wheel_width//2, self.wheel_width, endpoint=True).reshape((-1, 1))
+    def get_front_wheel_border_points(self):
+        # 바퀴 1개의 모서리 좌표
+        border_points = [
+            [-self.wheel_length/2, -self.wheel_width/2],
+            [self.wheel_length/2, -self.wheel_width/2],
+            [self.wheel_length/2, self.wheel_width/2],
+            [-self.wheel_length/2, self.wheel_width/2]
+        ]
 
-        # y 좌표 취득
-        ys = np.linspace(-self.wheel_height//2, self.wheel_height//2, self.wheel_height, endpoint=True).reshape((-1, 1))
+        # 차량 기준, 바퀴 위치 좌표
+        front_points = [
+            [self.wheel_front, -self.wheel_left],       # 전방 좌측
+            [self.wheel_front, self.wheel_right]        # 전방 우측
+        ]
 
-        # 외곽 좌표 취득
-        up_pos = np.insert(xs, 1, ys[0,0], axis=1)
-        down_pos = np.insert(xs, 1, ys[-1,-1], axis=1)
-        left_pos = np.insert(ys, 0, xs[0,0], axis=1)
-        right_pos = np.insert(ys, 0, xs[-1,-1], axis=1)
+        # 현재 차량 방향의 회전변환행렬
+        mtx1 = get_rotation_matrix(self.yaw)
 
-        # 외곽 좌료 회전
+        # 현재 바퀴 방향의 회전변환행렬
         steering_rad = np.radians(self.steering_deg)
-        affine_mtx = get_rotate_mtx(-self.yaw-steering_rad)
-        rotated_border = np.dot(np.vstack((up_pos, down_pos, left_pos, right_pos)), affine_mtx)
+        mtx2 = get_rotation_matrix(self.yaw + steering_rad)
+        
+        # 회전이 적용된 바퀴의 모서리 좌표
+        rotated_border_points1 = np.dot(border_points, mtx1)  # 차량의 방향만 적용
+        rotated_border_points2 = np.dot(border_points, mtx2)  # 차량의 방향 + steering_rad가 적용
 
-        # 바퀴 좌표 취득
-        left_wheel = self.wheel_height_gap//2, -self.wheel_width_gap//2
-        right_wheel = self.wheel_height_gap//2, self.wheel_width_gap//2
+        # 회전이 적용된 바퀴 위치 좌표
+        rotated_front_points = np.dot(front_points, mtx1)
 
-        # 바퀴 좌표 회전
-        affine_mtx = get_rotate_mtx(-self.yaw)
-        rotated_left_wheel = np.dot(left_wheel, affine_mtx)
-        rotated_right_wheel = np.dot(right_wheel, affine_mtx)
+        # 모든 회전이 적용된 바퀴의 모서리 좌표
+        rotated_front_points = np.array([ rotated_border_points2 + pt for pt in rotated_front_points ])
 
-        return (
-            rotated_border + rotated_left_wheel + self.position,
-            rotated_border + rotated_right_wheel + self.position)
-
-
-    def get_back_wheel_border_pos(self):
-        # x 좌표 취득
-        xs = np.linspace(-self.wheel_width//2, self.wheel_width//2, self.wheel_width, endpoint=True).reshape((-1, 1))
-
-        # y 좌표 취득
-        ys = np.linspace(-self.wheel_height//2, self.wheel_height//2, self.wheel_height, endpoint=True).reshape((-1, 1))
-
-        # 외곽 좌표 취득
-        up_pos = np.insert(xs, 1, ys[0,0], axis=1)
-        down_pos = np.insert(xs, 1, ys[-1,-1], axis=1)
-        left_pos = np.insert(ys, 0, xs[0,0], axis=1)
-        right_pos = np.insert(ys, 0, xs[-1,-1], axis=1)
-
-        # 외곽 좌료 회전
-        affine_mtx = get_rotate_mtx(-self.yaw)
-        rotated_border = np.dot(np.vstack((up_pos, down_pos, left_pos, right_pos)), affine_mtx)
-
-        # 바퀴 좌표 취득
-        left_wheel = -self.wheel_height_gap//2, -self.wheel_width_gap//2
-        right_wheel = -self.wheel_height_gap//2, self.wheel_width_gap//2
-
-        # 바퀴 좌표 회전
-        affine_mtx = get_rotate_mtx(-self.yaw)
-        rotated_left_wheel = np.dot(left_wheel, affine_mtx)
-        rotated_right_wheel = np.dot(right_wheel, affine_mtx)
-
-        return (
-            rotated_border + rotated_left_wheel + self.position,
-            rotated_border + rotated_right_wheel + self.position)
+        # 차량의 위치 적용
+        rotated_front_points += self.position
+        return rotated_front_points
+        
     
+    def get_back_wheel_border_points(self):
+        # 바퀴 1개의 모서리 좌표
+        border_points = [
+            [-self.wheel_length/2, -self.wheel_width/2],
+            [self.wheel_length/2, -self.wheel_width/2],
+            [self.wheel_length/2, self.wheel_width/2],
+            [-self.wheel_length/2, self.wheel_width/2]
+        ]
 
-    def get_ultrasonic_distance(self, env, ratio=None):
-        x, y = self.position
+        # 차량 기준, 바퀴 위치 좌표
+        back_points = [
+            [-self.wheel_back, -self.wheel_left],       # 후방 좌측
+            [-self.wheel_back, self.wheel_right]        # 후방 우측
+        ]
 
-        distances = []
-        start_end_pos = []
+        # 현재 차량 방향의 회전변환행렬
+        mtx1 = get_rotation_matrix(self.yaw)
 
-        for (ultra_x, ultra_y), ultra_yaw in self.get_ultrasonic_pos_with_yaw():
-            here_x, here_y = ultra_x, ultra_y
-            gradient = np.tan(ultra_yaw)
-            
-            if -np.pi/2 < ultra_yaw < np.pi/2:
-                sign = 0.7
-            else:
-                sign = -0.7
+        # 회전이 적용된 바퀴의 모서리 좌표
+        rotated_border_points1 = np.dot(border_points, mtx1)  # 차량의 방향만 적용
 
-            if np.abs(gradient) >= 100:
-                gradient = np.sign(gradient) * 100
-                sign = np.sign(sign) * 0.005
+        # 회전이 적용된 바퀴 위치 좌표
+        rotated_back_points = np.dot(back_points, mtx1)
 
-            here_x, here_y = ultra_x, ultra_y
-            while True:
-                round_x = np.rint(here_x).astype(np.int16)
-                round_y = np.rint(here_y).astype(np.int16)
-                
-                if not env.in_range((round_x, round_y)):
-                    break
+        # 모든 회전이 적용된 바퀴의 모서리 좌표
+        rotated_back_points = np.array([ rotated_border_points1 + pt for pt in rotated_back_points ])
 
-                next_x = here_x + sign
-                next_y = gradient * (next_x - ultra_x) + ultra_y
-
-                next_round_x = np.rint(next_x).astype(np.int16)
-                next_round_y = np.rint(next_y).astype(np.int16)
-
-                if env.in_range((next_round_x, next_round_y))  \
-                and env.MAP[next_round_y, next_round_x] == env.WALL:
-                    break
-
-                here_x, here_y = next_x, next_y
-            
-            dist = np.sqrt((here_x - ultra_x)**2 + (here_y - ultra_y)**2)
-
-            distances.append(dist)
-            start_end_pos.append(((ultra_x, ultra_y), (here_x, here_y)))
-        
-        distances = np.rint(np.array(distances) / 2)
-
-        if ratio:
-            distances = np.rint(distances * ratio)
-            
-        distances = np.clip(distances, 0, 200)
-
-        # 초음파 무작위 랜덤 값 적용
-        if np.random.sample() < 0.3:
-            rand_idx = np.random.choice(len(distances), size=np.rint(len(distances)/3.0).astype(np.int8), replace=False)
-            distances[rand_idx] += np.rint(np.random.normal(loc=0, scale=20, size=rand_idx.size))
-            distances = np.clip(distances, 0, 200)
-        
-        return distances, start_end_pos
-
+        # 차량의 위치 적용
+        rotated_back_points += self.position
+        return rotated_back_points
