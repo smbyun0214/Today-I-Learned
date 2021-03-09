@@ -1,5 +1,0 @@
-<launch>
-  <include file="$(find proj_dqn)/launch/xycar/ultrasonic.launch" />
-  <include file="$(find proj_dqn)/launch/xycar/xycar_motor_b2.launch" />
-  <node name="driver" pkg="proj_dqn" type="dqn_main.py" output="screen" />
-</launch>

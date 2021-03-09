@@ -1,4 +1,0 @@
-<launch>
-  <!-- A2 motor node -->
-  <include file="$(find xycar_motor)/launch/xycar_motor_a2.launch" />
-</launch>

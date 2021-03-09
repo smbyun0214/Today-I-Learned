@@ -108,7 +108,18 @@ def get_ultrasonic_distance(map, car):
     return start_points, end_points, yaws
 
 
-def is_collision(map, car):
+def is_collision(map, car, goal, road=[255, 255, 255]):
+    """지도상에서 차량의 상태를 확인하는 함수
+
+    Args:
+        map: 장애물이 있는 지도
+        car: 차량 객체
+        goal: 목적지 색상값(BGR)
+        road: 허용된 길의 색상값(BGR)
+    
+    Returns:
+        int: 1: 목적지 도착, 0: 길 위에 있음, -1: 장애물에 충돌
+    """
     border_points = car.get_border_points()
 
     # 차량 모서리 좌표를 한개 더 추가
@@ -128,9 +139,11 @@ def is_collision(map, car):
         ys = rint(np.linspace(pt1[1], pt2[1], num=num, endpoint=True))
 
         for x, y in zip(xs, ys):
-            if in_range(map, x, y) and not np.array_equal(map[y, x], [255, 255, 255]):
-                return True
-    return False
+            if in_range(map, x, y) and np.array_equal(map[y, x], goal):
+                return 1
+            elif in_range(map, x, y) and not np.array_equal(map[y, x], [255, 255, 255]):
+                return -1
+    return 0
 
 
 
