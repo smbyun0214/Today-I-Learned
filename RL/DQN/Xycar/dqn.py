@@ -41,14 +41,14 @@ class NN(nn.Module):
 
 class DQNAgent():
 
-    def __init__(self, model, target_model, optimizer, epsilon_init=1.0, memory_maxlen=100000, skip_frame=4, stack_frame=10):
+    def __init__(self, model, target_model, learning_rate=0.0001, epsilon_init=1.0, memory_maxlen=100000, skip_frame=4, stack_frame=10):
         self.device = torch.device("cuda:0" if torch.cuda.is_available() else "cpu")
 
         self.model = model.to(self.device)
         self.target_model = target_model.to(self.device)
         
-        self.optimizer = optimizer
-        self.loss = F.smooth_l1_loss
+        self.optimizer = optim.Adam(self.model.parameters(), lr=learning_rate)
+        self.loss = F.mse_loss
 
         self.experience_memory = deque(maxlen=memory_maxlen)
         self.observation_set = deque(maxlen=skip_frame*stack_frame)
@@ -141,7 +141,6 @@ class DQNAgent():
             self.model.eval()
             self.target_model.eval()
 
-        print(self.model.training, self.target_model.training)
 
 
 
