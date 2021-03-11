@@ -72,14 +72,19 @@ class Car(object):
         self.max_ultrasonic_seek_pixel = self.max_ultrasonic_seek_meter / self.meter_per_pixel
 
 
+    def reset(self):
+        self.velocity = 0.0         # 현재 차량 속도
+        self.acceleration = 0.0     # 현채 차량 가속도
+
+
     def get_ultrasonic_pos_and_yaw(self):
         """현재 차량에 부착되어 있는 초음파센서의 위치정보(position)와 방향정보(yaw)를 반환
 
         차량의 형태가 아래와 같을 때, **U**는 초음파의 위치를 나타낸다.
         +---+---------U---------+---+
-        | ==+==---------------==+== U
-        |   |         x          |  U
-        | ==+==---------------==+== U
+        U ==+==---------------==+== U
+        U   |         x          |  U
+        U ==+==---------------==+== U
         +---+---------U---------+---+
 
         Returns:
@@ -94,7 +99,10 @@ class Car(object):
             [self.border_front, -self.border_left/2],   # 2번 초음파센서 위치(좌상단)
             [self.border_front, 0],                     # 3번 초음파센서 위치(상단)
             [self.border_front, self.border_right/2],   # 4번 초음파센서 위치(우상단)
-            [0, self.border_right]                      # 5번 초음파센서 위치(우측)
+            [0, self.border_right],                     # 5번 초음파센서 위치(우측)
+            [-self.border_back, self.border_right/2],   # 6번 초음파센서 위치(우하단)
+            [-self.border_back, 0],                     # 7번 초음파센서 위치(하단)
+            [-self.border_back, -self.border_left/2]    # 8번 초음파센서 위치(좌하단)
         ]
 
         ultrasonic_yaw = np.array([
@@ -103,6 +111,9 @@ class Car(object):
             np.radians(0),          # 3번 초음파센서 방향(0)
             np.radians(30),         # 4번 초음파센서 방향(30)
             np.radians(90),         # 5번 초음파센서 방향(90)
+            np.radians(150),        # 6번 초음파센서 방향(180-30)
+            np.radians(180),        # 7번 초음파센서 방향(180)
+            np.radians(-150),       # 8번 초음파센서 방향(-180+30)
         ])
 
         # yaw 방향 회전이 적용된 초음파센서 위치
