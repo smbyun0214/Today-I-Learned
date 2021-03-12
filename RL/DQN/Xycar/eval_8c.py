@@ -1,10 +1,11 @@
 from dqn import *
 from simulator.viewer import *
 from simulator.car import *
+import cv2 as cv
 
 
 def get_random_start_pos():
-    return np.random.randint(100, 200), 100
+    return np.random.randint(100, 200), np.random.randint(600, 750)
 
 def get_random_start_yaw():
     return np.random.uniform(np.pi/5*2, np.pi/5*3)
@@ -23,18 +24,18 @@ learning_rate = 0.0001
 discount_factor = 0.99
 batch_size = 32
 
-model = NN(5, stack_frame, 3)
-target_model = NN(5, stack_frame, 3)
+model = NN(8, stack_frame, 9)
+target_model = NN(8, stack_frame, 9)
 
 car = Car()
 agent = DQNAgent(model, target_model, learning_rate)
 
-agent.model_load(830)
+agent.model_load(30)
 
-map_origin = cv.imread("simulator/map/rally_map4.png")
-goal_pixel = [255, 51, 4]
+map_origin = cv.imread("simulator/map/rally_map2.png")
 
 episode_cnt = 0
+
 # 30fps = 1000/30
 # fps = int(1000/30)
 fps = 10
@@ -58,6 +59,7 @@ while episode_cnt < run_episode:
 
     while not is_episode_done:
         background = map_origin.copy()
+
         draw_car(background, car)
         draw_ultrasonic(background, car, map_origin)
         cv.imshow("simulator", background)
@@ -65,16 +67,26 @@ while episode_cnt < run_episode:
         action = agent.get_action(state)
 
         # 조향각 조정
-        if action == 0:
+        if action % 3 == 0:
             steering_deg = -car.max_steering_deg
-        elif action == 1:
+        elif action % 3 == 1:
             steering_deg = 0
-        else:
+        elif action % 3 == 2:
             steering_deg = car.max_steering_deg
+        
+        if action // 3 == 0:
+            gear = car.DRIVE
+            reward = 1
+        elif action // 3 == 1:
+            gear = car.BREAK
+            reward = -1
+        elif action // 3 == 2:
+            gear = car.REVERSE
+            reward = -1
 
-        car.update(1/30, car.DRIVE, steering_deg)
+        car.update(1/fps, gear, steering_deg)
 
-        car_status = is_collision(map_origin, car, goal_pixel)
+        car_status = is_collision(map_origin, car)
 
         if car_status != 0:
             is_episode_done = 1

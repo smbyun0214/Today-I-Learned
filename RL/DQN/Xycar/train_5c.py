@@ -4,7 +4,7 @@ from simulator.car import *
 
 
 def get_random_start_pos():
-    return np.random.randint(100, 200), 100
+    return np.random.randint(100, 200), np.random.randint(600, 750)
 
 def get_random_start_yaw():
     return np.random.uniform(np.pi/5*2, np.pi/5*3)
@@ -18,10 +18,12 @@ save_episode = 10
 
 update_target_episode = 100
 
-epsilon_decay = 0.0001
+epsilon_decay = 0.00001
 learning_rate = 0.0001
 discount_factor = 0.99
 batch_size = 32
+
+max_step = 5000
 
 model = NN(5, stack_frame, 3)
 target_model = NN(5, stack_frame, 3)
@@ -30,10 +32,10 @@ car = Car()
 agent = DQNAgent(model, target_model, learning_rate)
 writer = SummaryWriter()
 
-map_origin = cv.imread("simulator/map/rally_map4.png")
-goal_pixel = [255, 51, 4]
+map_origin = cv.imread("simulator/map/rally_map2.png")
 
 episode_cnt = 0
+fps = 10
 
 while episode_cnt < run_episode:
     step_losses = []
@@ -41,13 +43,17 @@ while episode_cnt < run_episode:
 
     is_episode_done = 0
     episode_rewards = 0
+    step_cnt = 0
+
+    car.reset()
+    gear = car.BREAK
 
     car.position = get_random_start_pos()
     car.yaw = get_random_start_yaw()
     car.steering_deg = 0
 
     ultrasonic_start_points, ultrasonic_end_points, _ = get_ultrasonic_distance(map_origin, car)
-    distances = np.sqrt(np.sum((ultrasonic_start_points - ultrasonic_end_points)**2, axis=1))
+    distances = np.sqrt(np.sum((ultrasonic_start_points[:5] - ultrasonic_end_points[:5])**2, axis=1))
     distances_meter = rint(distances * car.meter_per_pixel * 100)
 
     agent.observation_set.clear()
@@ -57,51 +63,56 @@ while episode_cnt < run_episode:
     state = agent.skip_stack_frame(distances_meter)
 
     while not is_episode_done:
+        background = map_origin.copy()
+
+        draw_car(background, car)
+        draw_ultrasonic(background, car, map_origin)
+        cv.imshow("simulator", background)
+        cv.waitKey(10)
+
         action = agent.get_action(state)
 
         # 조향각 조정
-        if action == 0:
+        if action % 3 == 0:
             steering_deg = -car.max_steering_deg
-        elif action == 1:
+        elif action % 3 == 1:
             steering_deg = 0
-        else:
+        elif action % 3 == 2:
             steering_deg = car.max_steering_deg
-
-        car.update(1/30, car.DRIVE, steering_deg)
-
-        car_status = is_collision(map_origin, car, goal_pixel)
-
-        # 차량 충돌
-        if car_status == -1:
-            is_episode_done = 1
-            reward = -100
-        # 차량 도착
-        elif car_status == 1:
-            is_episode_done = 1
-            reward = 100
-            print("도착:", episode)
-        else:
-            reward = 1
+        
+        car.update(1/fps, car.DRIVE, steering_deg)
 
         ultrasonic_start_points, ultrasonic_end_points, _ = get_ultrasonic_distance(map_origin, car)
-        distances = np.sqrt(np.sum((ultrasonic_start_points - ultrasonic_end_points)**2, axis=1))
+        distances = np.sqrt(np.sum((ultrasonic_start_points[:5] - ultrasonic_end_points[:5])**2, axis=1))
         distances_meter = rint(distances * car.meter_per_pixel * 100)
         
         next_state = agent.skip_stack_frame(distances_meter)
+
+        # 차량 충돌
+        reward = 1
+        if is_collision(map_origin, car) or np.min(distances_meter) <= 10:
+            is_episode_done = 1
+            reward = -10
+        elif step_cnt >= max_step:
+            print("Max Step 도달:", episode_cnt)
+            is_episode_done = 1
+            reward = 0
 
         agent.append_sample(state, action, reward, next_state, is_episode_done)
 
         loss, maxQ = agent.train_model(discount_factor, batch_size)
 
-
         if agent.epsilon > agent.epsilon_min:
             agent.epsilon -= epsilon_decay
 
-        step_losses.append(loss)
+        step_losses.append(loss.item())
         step_max_qs.append(maxQ)
 
         episode_rewards += reward
         state = next_state
+        step_cnt += 1
+
+    print(episode_cnt)
 
     # 타겟 네트워크 업데이트
     # 일정 스텝마다 타겟 네트워크 업데이트 수행
