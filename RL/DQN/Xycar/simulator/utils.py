@@ -1,12 +1,24 @@
 import os
 import numpy as np
 import cv2 as cv
-from simulator.car import Car
 
 
 RED = (0, 0, 255)
 GREEN = (0, 255, 0)
 BLUE = (255, 0, 0)
+
+
+def get_roate_pos(pos, yaw):
+    x, y = pos
+    return (x * np.cos(yaw), y * np.sin(yaw))
+
+
+def normalize_radian(rad):
+    while rad < -np.pi:
+        rad += 2 * np.pi
+    while np.pi < rad:
+        rad -= 2 * np.pi
+    return rad
 
 
 def get_rotation_matrix(yaw):
@@ -108,13 +120,12 @@ def get_ultrasonic_distance(map, car):
     return start_points, end_points, yaws
 
 
-def is_collision(map, car, road=[255, 255, 255]):
+def is_collision(map, car):
     """지도상에서 차량의 상태를 확인하는 함수
 
     Args:
         map: 장애물이 있는 지도
         car: 차량 객체
-        road: 허용된 길의 색상값(BGR)
     
     Returns:
         bool: False: 길 위에 있음, True: 장애물에 충돌
@@ -141,38 +152,3 @@ def is_collision(map, car, road=[255, 255, 255]):
             if in_range(map, x, y) and not np.array_equal(map[y, x], [255, 255, 255]):
                 return True
     return False
-
-
-
-if __name__ == "__main__":
-    car = Car((500, 500), np.radians(0))
-    gear = car.BREAK
-    steering_deg = 0
-
-    background_origin = cv.imread("map/rally_map3.png")
-    # 1초 = 1000ms
-    # 30fps = 1000/30
-    delay = 1000//30
-    while True:
-        background = background_origin.copy()
-        draw_car(background, car)
-        # draw_car_detail(background, car)
-        # draw_ultrasonic(background, car, background_origin)            
-        cv.imshow("simulator", background)
-
-        if is_collision(background_origin, car):
-            car.position = (500, 500)
-            car.yaw = np.radians(0)
-
-        key = cv.waitKey(delay)
-        if key == ord("q"):
-            break
-        elif key == ord("h"):
-            steering_deg = -30
-        elif key == ord("l"):
-            steering_deg = 30
-        elif key == ord("k"):
-            gear = car.DRIVE
-        elif key == ord("j"):
-            gear = car.REVERSE
-        car.update(1/30, gear, steering_deg)

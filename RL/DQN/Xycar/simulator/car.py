@@ -1,23 +1,6 @@
 import numpy as np
 
-
-def get_roate_pos(pos, yaw):
-    x, y = pos
-    return (x * np.cos(yaw), y * np.sin(yaw))
-
-
-def get_rotation_matrix(yaw):
-    return np.array([
-        [np.cos(yaw), np.sin(yaw)],
-        [-np.sin(yaw), np.cos(yaw)]])
-
-
-def normalize_radian(rad):
-    while rad < -np.pi:
-        rad += 2 * np.pi
-    while np.pi < rad:
-        rad -= 2 * np.pi
-    return rad
+from simulator.utils import *
 
 
 class Car(object):
@@ -134,21 +117,21 @@ class Car(object):
         if steering_deg:
             self.steering_deg = max(-self.max_steering_deg, min(steering_deg, self.max_steering_deg))
 
-        # 기어에 따른 가속도 계산
-        if gear == self.DRIVE:
-            self.acceleration += self.delta_acceleration * delta_time
-        elif gear == self.REVERSE:
-            self.acceleration -= self.delta_acceleration * delta_time
-        self.acceleration = max(-self.max_acceleration, min(self.acceleration, self.max_acceleration))
-
-        # 속도 계산
-        self.velocity += self.acceleration * delta_time
-        self.velocity = max(-self.max_velocity, min(self.velocity, self.max_velocity))
-
         # 정지 기어일 경우, 가속도, 속도는 0
         if gear == self.BREAK:
             self.acceleration = 0
             self.velocity = 0
+        else:
+            # 기어에 따른 가속도 계산
+            if gear == self.DRIVE:
+                self.acceleration += self.delta_acceleration * delta_time
+            elif gear == self.REVERSE:
+                self.acceleration -= self.delta_acceleration * delta_time
+            self.acceleration = max(-self.max_acceleration, min(self.acceleration, self.max_acceleration))
+
+            # 속도 계산
+            self.velocity += self.acceleration * delta_time
+            self.velocity = max(-self.max_velocity, min(self.velocity, self.max_velocity))
 
         # 현재 위치 계산
         x, y = self.position

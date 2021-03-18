@@ -3,11 +3,7 @@ import pygame
 import numpy as np
 import cv2 as cv
 
-
-def get_rotate_mtx(yaw):
-    return np.array([
-        [np.cos(yaw), np.sin(yaw)],
-        [-np.sin(yaw), np.cos(yaw)]])
+from simulator.utils import get_rotation_matrix
 
 
 class Environment(object):
@@ -258,7 +254,7 @@ class Environment(object):
         """
         뒷 바퀴 그리기
         """
-        mtx = get_rotate_mtx(-car.yaw)
+        mtx = get_rotate_matrix(-car.yaw)
 
         rotated_surf = pygame.transform.rotate(surface, np.degrees(car.yaw))
 
@@ -297,7 +293,7 @@ class Environment(object):
         """
         앞 바퀴 그리기
         """
-        mtx = get_rotate_mtx(-car.yaw)
+        mtx = get_rotate_matrix(-car.yaw)
 
         steering_rad = np.radians(car.steering_deg)
         rotated_surf = pygame.transform.rotate(surface, np.degrees(car.yaw+steering_rad))
@@ -372,70 +368,3 @@ class Environment(object):
             self.draw_ultrasonic(car)
             pygame.draw.circle(self.screen, self.GREEN, car.position, 5)
         pygame.display.flip()
-
-
-
-if __name__ == "__main__":
-    from agent import Car
-
-    env = Environment("rally_map.png", map_type="image", fps=30)
-    car = Car()
-    car.position = (100, 120)
-
-    i = 0
-    delta = -1
-
-    # start_pos = env.get_start_pos(car)
-
-    episode = 0
-    while not env.is_done:
-        is_collision = False
-
-        # random_pos, random_yaw = env.get_random_pos_and_yaw(car)
-        # car.position = random_pos
-        # car.yaw = random_yaw
-        car.position = (130, 428)
-        car.yaw = np.radians(-135)
-
-        episode += 1
-        
-        obs, _ = car.get_ultrasonic_distance(env)
-        env.save_pos_and_image(car, obs)
-
-        while not is_collision and not env.is_done:
-            # env.render(car)
-
-            is_collision = env.status(car) == env.WALL
-            # print(car.get_ultrasonic_distance(env)[0])
-
-            # for event in pygame.event.get():
-            #     # X를 눌렀으면, 게임을 종료
-            #     if event.type == pygame.QUIT:
-            #         env.is_done = True
-            #     if event.type == pygame.KEYDOWN and event.key == pygame.K_q:
-            #         is_collision = True
-
-            # pressed = pygame.key.get_pressed()
-            # if pressed[pygame.K_LEFT]:
-            #     angle += 5
-            # elif pressed[pygame.K_RIGHT]:
-            #     angle -= 5
-            # if pressed[pygame.K_UP]:
-            #     drive = car.DRIVE
-            # elif pressed[pygame.K_DOWN]:
-            #     drive = car.REVERSE
-            # elif pressed[pygame.K_s]:
-            #     drive = car.NEUTRAL
-            #     car.velocity = 0
-            
-            car.update(car.DRIVE, i, env.dt)
-            obs, _ = car.get_ultrasonic_distance(env)
-            env.save_pos_and_image(car, obs)
-            
-            # car.update(car.NEUTRAL, i, env.dt)
-            # print(car.velocity, car.acceleration, env.is_done, env.dt)
-            i += delta
-            if i <= -15 or 15 <= i:
-                delta *= -1
-        
-        env.save_video(episode)

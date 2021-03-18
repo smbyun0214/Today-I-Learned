@@ -8,8 +8,6 @@ import torch.nn as nn
 import torch.optim as optim
 import torch.nn.functional as F
 
-from torch.utils.tensorboard import SummaryWriter
-
 from collections import deque
 
 
@@ -25,9 +23,10 @@ class NN(nn.Module):
         self.action_size = action_size
 
         # 네트워크 모델: 3층의 은닉층으로 구성된 인공신경망
-        self.fc1 = nn.Linear(self.input_size*self.stack_frame, 512)
-        self.fc2 = nn.Linear(512, 512)
-        self.fc3 = nn.Linear(512, self.action_size)
+        self.fc1 = nn.Linear(self.input_size*self.stack_frame, 128)
+        self.fc2 = nn.Linear(128, 512)
+        self.fc3 = nn.Linear(512, 512)
+        self.fc4 = nn.Linear(512, self.action_size)
     
 
     def forward(self, x):
@@ -35,17 +34,21 @@ class NN(nn.Module):
         # 출력: 각 행동에 대한 Q 값
         x = F.relu(self.fc1(x))
         x = F.relu(self.fc2(x))
-        x = self.fc3(x)
+        x = F.relu(self.fc3(x))
+        x = self.fc4(x)
         return x
 
 
 class DQNAgent():
 
-    def __init__(self, model, target_model, learning_rate=0.0001, epsilon_init=1.0, memory_maxlen=100000, skip_frame=4, stack_frame=10):
-        self.device = torch.device("cuda:0" if torch.cuda.is_available() else "cpu")
+    def __init__(self, model, target_model, learning_rate=0.0001, epsilon_init=1.0, skip_frame=4, stack_frame=10, memory_maxlen=1000000):
+        self.model = model
+        self.target_model = target_model
+        self.update_target()
 
-        self.model = model.to(self.device)
-        self.target_model = target_model.to(self.device)
+        if torch.cuda.is_available():
+            self.model = model.cuda()
+            self.target_model = target_model.cuda()
         
         self.optimizer = optim.Adam(self.model.parameters(), lr=learning_rate)
         self.loss = F.mse_loss
@@ -59,8 +62,6 @@ class DQNAgent():
         self.skip_frame = skip_frame
         self.stack_frame = stack_frame
 
-        self.update_target()
-
 
     def update_target(self):
         self.target_model.load_state_dict(self.model.state_dict())
@@ -71,8 +72,14 @@ class DQNAgent():
             return np.random.randint(0, self.model.action_size)
         
         with torch.no_grad():
-            Q = self.model(torch.FloatTensor(state).unsqueeze(0).to(self.device))
+            Q = self.model(torch.FloatTensor(state).unsqueeze(0))
             return np.argmax(Q.cpu().detach().numpy())
+
+
+    def reset(self, observation):
+        self.observation_set.clear()
+        for i in range(self.skip_frame * self.stack_frame):
+            self.observation_set.append(observation)
 
 
     def skip_stack_frame(self, observation):
@@ -92,13 +99,13 @@ class DQNAgent():
     def train_model(self, discount_factor, batch_size):
         batch_indices = np.random.choice(len(self.experience_memory), min(batch_size, len(self.experience_memory)), replace=False)
 
-        state_batch         = torch.FloatTensor(np.stack([self.experience_memory[idx][0] for idx in batch_indices], axis=0)).to(self.device)
-        action_batch        = torch.FloatTensor(np.stack([self.experience_memory[idx][1] for idx in batch_indices], axis=0)).to(self.device)
-        reward_batch        = torch.FloatTensor(np.stack([self.experience_memory[idx][2] for idx in batch_indices], axis=0)).to(self.device)
-        next_state_batch    = torch.FloatTensor(np.stack([self.experience_memory[idx][3] for idx in batch_indices], axis=0)).to(self.device)
-        done_batch          = torch.FloatTensor(np.stack([self.experience_memory[idx][4] for idx in batch_indices], axis=0)).to(self.device)
+        state_batch         = torch.FloatTensor(np.stack([self.experience_memory[idx][0] for idx in batch_indices], axis=0))
+        action_batch        = torch.FloatTensor(np.stack([self.experience_memory[idx][1] for idx in batch_indices], axis=0))
+        reward_batch        = torch.FloatTensor(np.stack([self.experience_memory[idx][2] for idx in batch_indices], axis=0))
+        next_state_batch    = torch.FloatTensor(np.stack([self.experience_memory[idx][3] for idx in batch_indices], axis=0))
+        done_batch          = torch.FloatTensor(np.stack([self.experience_memory[idx][4] for idx in batch_indices], axis=0))
 
-        eye = torch.eye(self.model.action_size).to(self.device)
+        eye = torch.eye(self.model.action_size)
         one_hot_action = eye[action_batch.view(-1).long()]
         q = (self.model(state_batch) * one_hot_action).sum(1)
 
@@ -116,12 +123,12 @@ class DQNAgent():
         return loss.data, max_q
 
 
-    def model_save(self, episode):
+    def model_save(self, episode, comment=""):
         script_dir = os.path.dirname(__file__) 
-        dir_path = os.path.join(script_dir, "save_dqn")
+        dir_path = os.path.join(script_dir, "save_dqn{}".format(comment))
         if not os.path.isdir(dir_path):
             os.mkdir(dir_path)
-        save_path = os.path.join(script_dir, "save_dqn", "main_model_{:06}.pth".format(episode))
+        save_path = os.path.join(script_dir, "save_dqn{}".format(comment), "main_model_{:06}.pth".format(episode))
 
         buffer = io.BytesIO()
         torch.save(self.model.state_dict(), buffer, pickle_module=dill, _use_new_zipfile_serialization=False)
@@ -129,9 +136,9 @@ class DQNAgent():
             f.write(buffer.getvalue())
 
 
-    def model_load(self, episode, eval=True):
+    def model_load(self, episode, comment="", eval=True):
         script_dir = os.path.dirname(__file__) 
-        load_path = os.path.join(script_dir, "save_dqn", "main_model_{:06}.pth".format(episode))
+        load_path = os.path.join(script_dir, "save_dqn{}".format(comment), "main_model_{:06}.pth".format(episode))
         
         # Python3
         self.model.load_state_dict(torch.load(load_path, map_location=self.device))
@@ -140,148 +147,3 @@ class DQNAgent():
         if eval:
             self.model.eval()
             self.target_model.eval()
-
-
-
-
-if __name__ == "__main__":
-    from simulator.viewer import *
-    from simulator.car import *
-
-    car = Car((500, 500), np.radians(0))
-    gear = car.BREAK
-    steering_deg = 0
-
-    skip_frame = 4
-    stack_frame = 10
-
-    run_step = 1000
-    target_update_step = 1000
-    save_step = 10
-
-    model = NN(5, stack_frame, 3)
-    target_model = NN(5, stack_frame, 3)
-
-    learning_rate = 0.01
-    discount_factor = 0.99
-    batch_size = 32
-
-    optimizer = optim.Adam(model.parameters(), lr=learning_rate)
-    model.train()
-    agent = DQNAgent(model, target_model, optimizer)
-
-    agent.model_load(880)
-    
-    if agent.model.training:
-        writer = SummaryWriter()
-
-    background_origin = cv.imread("simulator/map/rally_map4.png")
-
-    height, width = background_origin.shape[:2]
-
-    # 1초 = 1000ms
-    # 30fps = 1000/30
-    # delay = 1000//30
-    delay = 10
-    is_done = False
-
-    episode = 0
-
-    while not is_done:
-        is_episode_done = 0
-        episode_rewards = 0
-
-        start_points, end_points, _ = get_ultrasonic_distance(background_origin, car)
-        distances = np.sqrt(np.sum((start_points - end_points)**2, axis=1))
-        distances_meter = rint(distances * car.meter_per_pixel * 100)
-
-        for i in range(skip_frame * stack_frame):
-            agent.observation_set.append(distances_meter)
-
-        state = agent.skip_stack_frame(distances_meter)
-
-        car.position = (np.random.randint(100, 200), 100)
-        car.yaw = np.random.uniform(np.pi/5*2, np.pi/5*3)
-
-        losses = []
-        max_qs = []
-
-        step = 0
-        
-        while not is_episode_done:
-            if not agent.model.training:
-                background = background_origin.copy()
-                draw_car(background, car)
-                cv.imshow("simulator", background)
-                print(distances_meter)
-            # print(state)
-
-            action = agent.get_action(state)
-
-            # 조향각 조정
-            if action == 0:
-                steering_deg = -car.max_steering_deg
-            elif action == 1:
-                steering_deg = 0
-            else:
-                steering_deg = car.max_steering_deg
-
-            car.update(1/30, car.DRIVE, steering_deg)
-
-            car_state = is_collision(background_origin, car, [255, 51, 4])
-            if car_state == -1:
-                is_episode_done = 1
-                reward = 0
-            elif car_state == 1:
-                is_episode_done = 1
-                reward = 2
-                print("도착:", episode)
-            else:
-                reward = 1
-
-            start_points, end_points, _ = get_ultrasonic_distance(background_origin, car)
-            distances = np.sqrt(np.sum((start_points - end_points)**2, axis=1))
-            distances_meter = rint(distances * car.meter_per_pixel * 100)
-            next_state = agent.skip_stack_frame(distances_meter)
-
-            if agent.model.training:
-                agent.append_sample(state, action, reward, next_state, is_episode_done)
-
-                loss, maxQ = agent.train_model(discount_factor, batch_size)
-
-                losses.append(loss)
-                max_qs.append(maxQ)
-
-                # 타겟 네트워크 업데이트
-                # 일정 스텝마다 타겟 네트워크 업데이트 수행
-                if step != 0 and step % target_update_step == 0:
-                    agent.update_target()
-
-
-            episode_rewards += reward
-            state = next_state
-            step += 1
-
-            if not agent.model.training:
-                key = cv.waitKey(delay)
-                if key == ord("q"):
-                    is_done = True
-                    break
-
-        
-        if agent.epsilon > agent.epsilon_min:
-            agent.epsilon -= 1 / run_step
-        
-        # 모델 저장
-        if agent.model.training and episode % save_step == 0 and episode != 0 :
-            agent.model_save(episode)
-
-        if agent.model.training:
-            writer.add_scalar("DQN/loss", np.mean(losses), episode)
-            writer.add_scalar("DQN/max_q", np.mean(max_qs), episode)
-            writer.add_scalar("DQN/reward", episode_rewards, episode)
-            writer.add_scalar("DQN/epsilon", agent.epsilon, episode)
-            writer.flush()
-
-        episode += 1
-        
