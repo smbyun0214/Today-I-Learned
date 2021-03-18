@@ -50,6 +50,7 @@ class Simulator(object):
 
     def reset(self):
         self.is_done = False
+        self.car.reset()
         self._set_random_start_pos()
         distances_meter = self._get_ultrasonics_distances()
         return distances_meter, self.is_done
