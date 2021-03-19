@@ -105,13 +105,13 @@ class DQNAgent():
     def train_model(self, discount_factor, batch_size):
         batch_indices = np.random.choice(len(self.experience_memory), min(batch_size, len(self.experience_memory)), replace=False)
 
-        state_batch         = torch.FloatTensor(np.stack([self.experience_memory[idx][0] for idx in batch_indices], axis=0))
-        action_batch        = torch.FloatTensor(np.stack([self.experience_memory[idx][1] for idx in batch_indices], axis=0))
-        reward_batch        = torch.FloatTensor(np.stack([self.experience_memory[idx][2] for idx in batch_indices], axis=0))
-        next_state_batch    = torch.FloatTensor(np.stack([self.experience_memory[idx][3] for idx in batch_indices], axis=0))
-        done_batch          = torch.FloatTensor(np.stack([self.experience_memory[idx][4] for idx in batch_indices], axis=0))
+        state_batch         = torch.FloatTensor(np.stack([self.experience_memory[idx][0] for idx in batch_indices], axis=0)).to(self.device)
+        action_batch        = torch.FloatTensor(np.stack([self.experience_memory[idx][1] for idx in batch_indices], axis=0)).to(self.device)
+        reward_batch        = torch.FloatTensor(np.stack([self.experience_memory[idx][2] for idx in batch_indices], axis=0)).to(self.device)
+        next_state_batch    = torch.FloatTensor(np.stack([self.experience_memory[idx][3] for idx in batch_indices], axis=0)).to(self.device)
+        done_batch          = torch.FloatTensor(np.stack([self.experience_memory[idx][4] for idx in batch_indices], axis=0)).to(self.device)
 
-        eye = torch.eye(self.model.action_size)
+        eye = torch.eye(self.model.action_size, device=self.device)
         one_hot_action = eye[action_batch.view(-1).long()]
         q = (self.model(state_batch) * one_hot_action).sum(1)
 
@@ -120,7 +120,7 @@ class DQNAgent():
             next_q = self.target_model(next_state_batch)
             target_q = reward_batch + next_q.max(1).values*(discount_factor*(1 - done_batch))
 
-        loss = self.loss(q, target_q)
+        loss = self.loss(q, target_q).cpu()
         
         self.optimizer.zero_grad()
         loss.backward()
