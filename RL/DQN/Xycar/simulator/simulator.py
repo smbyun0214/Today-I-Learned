@@ -4,8 +4,8 @@ import os
 import numpy as np
 import cv2 as cv
 
-from car import Car
-from utils import *
+from simulator.car import Car
+from simulator.utils import *
 
 class Simulator(object):
     """

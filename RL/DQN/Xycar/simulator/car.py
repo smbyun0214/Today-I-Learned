@@ -2,7 +2,7 @@
 
 import numpy as np
 
-from utils import *
+from simulator.utils import *
 
 
 class Car(object):
