@@ -1,6 +1,8 @@
+# -*- coding: utf-8 -*-
+
 import numpy as np
 
-from simulator.utils import *
+from utils import *
 
 
 class Car(object):
@@ -27,7 +29,7 @@ class Car(object):
         #   |   |         x          |  |
         #   | ==+==---------------==+== |
         #   +---+-------------------+---+
-        self.meter_per_pixel = 1 / 210
+        self.meter_per_pixel = 1.0 / 210
         self.border_width = 63      # 차량 폭
         self.border_length = 126    # 차량 길이
 

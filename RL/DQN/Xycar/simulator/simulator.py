@@ -1,9 +1,11 @@
+# -*- coding: utf-8 -*-
+
 import os
 import numpy as np
 import cv2 as cv
 
-from simulator.car import Car
-from simulator.utils import *
+from car import Car
+from utils import *
 
 class Simulator(object):
     """

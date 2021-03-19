@@ -1,6 +1,8 @@
+# -*- coding: utf-8 -*-
+
 import os
 import io
-import dill
+
 import numpy as np
 
 import torch
@@ -8,15 +10,16 @@ import torch.nn as nn
 import torch.optim as optim
 import torch.nn.functional as F
 
+from copy import deepcopy
 from collections import deque
 
 
 # 딥러닝 모델
 # - 일반 네트워크와 타겟 네트워크 2가지 모델 이용
-class NN(nn.Module):
+class LinearModel(nn.Module):
 
     def __init__(self, input_size, stack_frame, action_size):   
-        super(NN, self).__init__()
+        super(LinearModel, self).__init__()
 
         self.input_size = input_size
         self.stack_frame = stack_frame
@@ -41,9 +44,11 @@ class NN(nn.Module):
 
 class DQNAgent():
 
-    def __init__(self, model, target_model, learning_rate=0.0001, epsilon_init=1.0, skip_frame=4, stack_frame=10, memory_maxlen=1000000):
+    def __init__(self, model, learning_rate=0.0001, epsilon_init=1.0, skip_frame=4, stack_frame=10, memory_maxlen=1000000):
+        self.device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
+        
         self.model = model
-        self.target_model = target_model
+        self.target_model = deepcopy(self.model)
         self.update_target()
 
         if torch.cuda.is_available():
@@ -72,7 +77,8 @@ class DQNAgent():
             return np.random.randint(0, self.model.action_size)
         
         with torch.no_grad():
-            Q = self.model(torch.FloatTensor(state).unsqueeze(0))
+            state = torch.FloatTensor(state).unsqueeze(0).to(self.device)
+            Q = self.model(state)
             return np.argmax(Q.cpu().detach().numpy())
 
 
@@ -123,28 +129,43 @@ class DQNAgent():
         return loss.data, max_q
 
 
-    def model_save(self, episode, comment=""):
-        script_dir = os.path.dirname(__file__) 
-        dir_path = os.path.join(script_dir, "save_dqn{}".format(comment))
+    def model_save(self, episode, comment=None):
+        script_dir = os.path.dirname(__file__)
+
+        if comment: 
+            dir_path = os.path.join(script_dir, "save_dqn_{}".format(comment))
+        else:
+            dir_path = os.path.join(script_dir, "save_dqn")
+
         if not os.path.isdir(dir_path):
             os.mkdir(dir_path)
-        save_path = os.path.join(script_dir, "save_dqn{}".format(comment), "main_model_{:06}.pth".format(episode))
 
+        save_path = os.path.join(dir_path, "main_model_{:06}.pth".format(episode))
+
+        # Python2
         buffer = io.BytesIO()
-        torch.save(self.model.state_dict(), buffer, pickle_module=dill, _use_new_zipfile_serialization=False)
+        torch.save(self.model.state_dict(), buffer, _use_new_zipfile_serialization=False)
         with open(save_path, "wb") as f:
             f.write(buffer.getvalue())
 
 
-    def model_load(self, episode, comment="", eval=True):
+    def model_load(self, episode, comment= None, eval=True):
         script_dir = os.path.dirname(__file__) 
-        load_path = os.path.join(script_dir, "save_dqn{}".format(comment), "main_model_{:06}.pth".format(episode))
+
+        if comment: 
+            dir_path = os.path.join(script_dir, "save_dqn_{}".format(comment))
+        else:
+            dir_path = os.path.join(script_dir, "save_dqn")
+
+        load_path = os.path.join(dir_path, "main_model_{:06}.pth".format(episode))
         
-        # Python3
-        # self.model.load_state_dict(torch.load(load_path, map_location=self.device))
-        self.model.load_state_dict(torch.load(load_path))
-        self.target_model.load_state_dict(self.model.state_dict())
+        # Python2
+        with open(load_path, "rb") as f:
+            buffer = io.BytesIO(f.read())
+            self.model.load_state_dict(torch.load(buffer, map_location=self.device))
+            self.model.to(self.device)
 
         if eval:
             self.model.eval()
-            self.target_model.eval()
+        else:
+            self.update_target()
