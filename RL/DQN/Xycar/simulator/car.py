@@ -12,7 +12,7 @@ class Car(object):
         self.velocity = 0.0         # 현재 차량 속도
         self.acceleration = 0.0     # 현채 차량 가속도
 
-        self.max_velocity = 100.0       # 차량 속도 한계값
+        self.max_velocity = 70.0       # 차량 속도 한계값
         self.max_acceleration = 50.0    # 차량 가속도 한계값
         self.max_steering_deg = 30.0    # 차량 앞바퀴 각도 한계값
 
