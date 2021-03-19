@@ -141,7 +141,8 @@ class DQNAgent():
         load_path = os.path.join(script_dir, "save_dqn{}".format(comment), "main_model_{:06}.pth".format(episode))
         
         # Python3
-        self.model.load_state_dict(torch.load(load_path, map_location=self.device))
+        # self.model.load_state_dict(torch.load(load_path, map_location=self.device))
+        self.model.load_state_dict(torch.load(load_path))
         self.target_model.load_state_dict(self.model.state_dict())
 
         if eval:

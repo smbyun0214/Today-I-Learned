@@ -14,7 +14,7 @@ class Simulator(object):
 
         # 맵 정보 불러오기
         map_path = os.path.join(self.script_dir, "map", map)
-        self.map = cv.imread("simulator/map/rally_map2.png")
+        self.map = cv.imread(map_path)
         
         self.car = Car()
         self.fps = fps
