@@ -53,7 +53,7 @@ class DQNAgent():
 
         if torch.cuda.is_available():
             self.model = model.cuda()
-            self.target_model = target_model.cuda()
+            self.target_model = self.target_model.cuda()
         
         self.optimizer = optim.Adam(self.model.parameters(), lr=learning_rate)
         self.loss = F.mse_loss
