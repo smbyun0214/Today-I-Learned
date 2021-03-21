@@ -30,12 +30,15 @@ class Simulator(object):
         self.is_done = False
 
 
-    def render(self):
+    def render(self, fps=None):
         background = self.map.copy()
         draw_car(background, self.car)
         draw_ultrasonic(background, self.car, self.map)
         cv.imshow("Simulator", background)
-        cv.waitKey(int(1000/self.fps))
+        if fps:
+            cv.waitKey(int(1000/fps))
+        else:
+            cv.waitKey(int(1000/self.fps))
 
 
     def step(self, gear, steering_deg):

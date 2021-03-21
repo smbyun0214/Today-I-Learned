@@ -89,7 +89,7 @@ def get_ultrasonic_distance(map, car):
         gradient = np.tan(yaw)
 
         # 초음파 탐색 좌표 계산
-        if abs(gradient) >= car.max_ultrasonic_seek_pixel:
+        if abs(gradient) == np.pi:
             xs = np.full(rint(car.max_ultrasonic_seek_pixel), x1)
             ys = np.linspace(y1, y1 + np.sign(gradient)*car.max_ultrasonic_seek_pixel, num=rint(car.max_ultrasonic_seek_pixel), endpoint=True)
         else:
