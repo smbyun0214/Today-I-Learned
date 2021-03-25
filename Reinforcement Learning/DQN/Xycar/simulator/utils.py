@@ -166,7 +166,7 @@ def is_episode_done(map, car, reward_domain=None):
 
             for x, y in zip(xs, ys):
                 if np.array_equal(reward_domain[y, x], [255, 255, 255]):
-                    return False, np.sign(car.velocity, dtype=np.int16)
+                    return False, np.sign(car.velocity).astype(np.int16)
     
     return False, 0
 
