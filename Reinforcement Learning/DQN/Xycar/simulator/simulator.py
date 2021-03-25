@@ -26,14 +26,17 @@ class Simulator(object):
         self.BREAK = self.car.BREAK
 
         self.max_steering_deg = self.car.max_steering_deg
+        
+        self.reward_domain = get_reward_domain(self.map, self.car)
 
         self.is_done = False
 
 
     def render(self, fps=None):
         background = self.map.copy()
-        draw_car(background, self.car)
-        draw_ultrasonic(background, self.car, self.map)
+        background = draw_reward_domain(background, self.reward_domain)
+        background = draw_car(background, self.car)
+        background = draw_ultrasonic(background, self.car, self.map)
         cv.imshow("Simulator", background)
         if fps:
             cv.waitKey(int(1000/fps))
@@ -45,12 +48,19 @@ class Simulator(object):
         self.car.update(1/self.fps, gear, steering_deg)
 
         distances_meter = self._get_ultrasonics_distances()
-        if is_collision(self.map, self.car) or np.min(distances_meter) <= 10:
+        
+        is_done, reward = is_episode_done(self.map, self.car, self.reward_domain)
+
+        if is_done or np.min(distances_meter) <= 10:
             self.is_done = True
+            reward = -1
         else:
             self.is_done = False
 
-        return distances_meter, self.is_done
+        if reward != 0:
+            self.reward_domain = get_reward_domain(self.map, self.car)
+
+        return distances_meter, reward, self.is_done
 
 
     def reset(self):
@@ -58,7 +68,8 @@ class Simulator(object):
         self.car.reset()
         self._set_random_start_pos()
         distances_meter = self._get_ultrasonics_distances()
-        return distances_meter, self.is_done
+        self.reward_domain = get_reward_domain(self.map, self.car)
+        return distances_meter, 0, self.is_done
 
 
     def _set_random_start_pos(self):
@@ -70,7 +81,8 @@ class Simulator(object):
             
             distances_meter = self._get_ultrasonics_distances()
 
-            if not (is_collision(self.map, self.car) or np.min(distances_meter) <= 15):
+            is_done, _ = is_episode_done(self.map, self.car)
+            if not (is_done or np.min(distances_meter) <= 15):
                 break
 
 

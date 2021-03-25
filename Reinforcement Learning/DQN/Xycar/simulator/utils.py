@@ -54,6 +54,7 @@ def draw_car(image, car):
     back_border_points = car.get_back_wheel_border_points()
     cv.fillPoly(image, rint(front_border_points), RED)
     cv.polylines(image, rint(back_border_points), True, RED)
+    return image
 
 
 def draw_ultrasonic(image, car, map):
@@ -72,6 +73,7 @@ def draw_ultrasonic(image, car, map):
     # 초음파센서의 탐색 거리 그리기
     for pt1, pt2 in zip(start_points, end_points):
         cv.line(image, tuple(rint(pt1)), tuple(rint(pt2)), GREEN)
+    return image
 
 
 def get_ultrasonic_distance(map, car):
@@ -122,7 +124,7 @@ def get_ultrasonic_distance(map, car):
     return start_points, end_points, yaws
 
 
-def is_collision(map, car):
+def is_episode_done(map, car, reward_domain=None):
     """지도상에서 차량의 상태를 확인하는 함수
 
     Args:
@@ -130,7 +132,10 @@ def is_collision(map, car):
         car: 차량 객체
     
     Returns:
-        bool: False: 길 위에 있음, True: 장애물에 충돌
+        bool:
+            - True: 장애물에 충돌
+            - False: 길 위에 위치 또는 보상 영역 통과
+        int: reward
     """
     border_points = car.get_border_points()
 
@@ -152,5 +157,32 @@ def is_collision(map, car):
 
         for x, y in zip(xs, ys):
             if in_range(map, x, y) and not np.array_equal(map[y, x], [255, 255, 255]):
-                return True
-    return False
+                return True, -1
+
+    if reward_domain is not None:
+        for pt1, pt2, num in zip(border_points[:-1], border_points[1:], nums):
+            xs = rint(np.linspace(pt1[0], pt2[0], num=num, endpoint=True))
+            ys = rint(np.linspace(pt1[1], pt2[1], num=num, endpoint=True))
+
+            for x, y in zip(xs, ys):
+                if np.array_equal(reward_domain[y, x], [255, 255, 255]):
+                    return False, np.sign(car.velocity, dtype=np.int16)
+    
+    return False, 0
+
+
+
+def get_reward_domain(map, car, radius=500):
+    mask = np.zeros(map.shape, dtype=np.uint8)
+    mask = cv.circle(mask, tuple(rint(car.position)), radius, (255, 255, 255))
+    return mask
+    
+
+def draw_reward_domain(image, reward_domain):
+    mask = np.where(reward_domain == [255, 255, 255], [0, 255, 255], reward_domain)
+
+    mask_16 = mask.astype(np.int16)
+    image_16 = image.astype(np.int16)
+
+    image = np.clip(image_16 - mask_16, [0, 0, 0], [255, 255, 255]).astype(np.uint8)
+    return image

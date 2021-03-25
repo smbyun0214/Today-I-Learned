@@ -6,7 +6,7 @@ import numpy as np
 np.random.seed(42)
 
 load_model_comment = None
-load_model_episode = 1171
+load_model_episode = 1953
 
 sensor_count = 8
 action_size = 6
@@ -30,7 +30,7 @@ while True:
     gear_drive_cnt = 0
     gear_reverse_cnt = 0
     
-    obs, _ = env.reset()
+    obs, _, _ = env.reset()
 
     agent.reset(obs)
     gear = env.BREAK
@@ -62,7 +62,7 @@ while True:
             gear = env.REVERSE
             gear_reverse_cnt += 1
 
-        next_obs, _ = env.step(gear, steering_deg)
+        next_obs, _, _ = env.step(gear, steering_deg)
         next_state = agent.skip_stack_frame(next_obs)
 
         state = next_state
